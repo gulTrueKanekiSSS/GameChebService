@@ -42,12 +42,15 @@ SENTRY_DSN=your_sentry_dsn
 python manage.py migrate
 ```
 
-6. Запустите сервер разработки:
+6. Запустите сервер разработки (терминал 1):
 ```bash
 python manage.py runserver
 ```
-
-7. В отдельном терминале запустите бота:
+7. Запустите фронт для WebApp разработки(терминал 2):
+```bash
+ssh -R 80:localhost:8000 serveo.net
+```
+8. отдельном терминале запустите бота(терминал 3):
 ```bash
 python manage.py run_bot
 ```
@@ -65,6 +68,4 @@ quest_bot/
 ├── bot/                    # Код Telegram бота
 ├── core/                   # Основные модели и утилиты
 ├── api/                    # REST API
-├── admin/                  # Административный интерфейс
-└── tests/                  # Тесты
 ``` 

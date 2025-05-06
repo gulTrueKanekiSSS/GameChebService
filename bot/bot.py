@@ -33,6 +33,7 @@ dp = Dispatcher()
 dp.message.register(admin_commands.handle_approve, Command("approve"))
 dp.message.register(admin_commands.handle_reject, Command("reject"))
 
+
 def get_main_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
@@ -45,6 +46,7 @@ def get_main_keyboard():
 
 
 WEBAPP_URL = "https://52e8e396cdbd2607c69dd56f4482cd58.serveo.net/"
+
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
