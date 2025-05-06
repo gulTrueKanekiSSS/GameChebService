@@ -50,6 +50,13 @@ python manage.py runserver
 ```bash
 ssh -R 80:localhost:8000 serveo.net
 ```
+В треминале отразится ответ вида: 
+
+ `https://f46e16a3f52d1ca8714093538ebff532.serveo.net`
+
+Перейдите в `bot/bot.py` и поменяйте ссылку:
+
+`WEBAPP_URL= ""` - обязательно в конце добавить `/`
 8. отдельном терминале запустите бота(терминал 3):
 ```bash
 python manage.py run_bot
