@@ -3,7 +3,7 @@ import os
 import django
 
 # Указываем путь к settings.py
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'quest_bot.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
 django.setup()
 
 from bot.bot import start_bot  # Импорт твоей start_bot функции

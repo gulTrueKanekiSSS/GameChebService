@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Web App</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+    .card {
+      background: #f8f8f8;
+      padding: 20px;
+      border-radius: 12px;
+      margin-top: 30px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    .error {
+      color: red;
+      font-weight: bold;
+      margin-top: 20px;
+    }
+    pre {
+      text-align: left;
+      background: #eee;
+      padding: 10px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🚀 Telegram Web App</h1>
+  <div class="card" id="output">
+    <p>⏳ Загрузка...</p>
+  </div>
+
+  <script>
+    const output = document.getElementById("output");
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("id");
+      const name = params.get("name");
+      const phone = params.get("phone");
+
+      if (id && name && phone) {
+        output.innerHTML = `
+          <p><strong>🆔 Telegram ID:</strong> ${id}</p>
+          <p><strong>👤 Имя:</strong> ${name}</p>
+          <p><strong>📞 Телефон:</strong> ${phone}</p>
+        `;
+      } else {
+        output.innerHTML = `
+          <p class="error">❌ Не все параметры получены!</p>
+          <pre>${window.location.href}</pre>
+        `;
+      }
+    } catch (e) {
+      output.innerHTML = `<p class="error">❌ Ошибка: ${e.message}</p>`;
+    }
+  </script>
+</body>
+</html>
