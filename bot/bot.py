@@ -134,12 +134,10 @@ async def start_bot():
         logger.error(f"Ошибка при запуске бота: {e}")
         raise
 
-from bot.point_handlers import router as point_router
-from bot.route_handlers import router as route_router
 from bot.admin_commands import router as admin_router
+from bot.route_handlers import router as route_router
 
 def register_handlers(dp: Dispatcher):
     """Регистрация всех обработчиков"""
     dp.include_router(admin_router)
-    dp.include_router(point_router)
     dp.include_router(route_router) 

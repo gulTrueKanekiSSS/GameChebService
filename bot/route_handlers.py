@@ -12,6 +12,14 @@ from bot.states import RouteStates
 
 router = Router()
 
+async def check_admin(user_id: int) -> bool:
+    """Проверяет, является ли пользователь администратором"""
+    try:
+        user = await User.objects.aget(telegram_id=user_id)
+        return user.is_admin
+    except User.DoesNotExist:
+        return False
+
 def get_admin_keyboard():
     """Клавиатура для админа"""
     keyboard = ReplyKeyboardMarkup(
@@ -62,11 +70,7 @@ def get_routes_management_keyboard():
 @router.message(F.text == "📍 Точки")
 async def handle_points_menu(message: Message):
     """Обработка нажатия на кнопку 'Точки'"""
-    try:
-        user = await User.objects.aget(telegram_id=message.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(message.from_user.id):
         return
 
     await message.answer(
@@ -77,11 +81,7 @@ async def handle_points_menu(message: Message):
 @router.message(F.text == "🗺 Маршруты")
 async def handle_routes_menu(message: Message):
     """Обработка нажатия на кнопку 'Маршруты'"""
-    try:
-        user = await User.objects.aget(telegram_id=message.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(message.from_user.id):
         return
 
     await message.answer(
@@ -92,11 +92,7 @@ async def handle_routes_menu(message: Message):
 @router.callback_query(F.data == "list_points")
 async def handle_list_points_callback(callback: CallbackQuery):
     """Показать список точек"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     points = await sync_to_async(list)(Point.objects.all().order_by('-created_at'))
@@ -128,11 +124,7 @@ async def handle_list_points_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "list_routes")
 async def handle_list_routes_callback(callback: CallbackQuery):
     """Показать список маршрутов"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     routes = await sync_to_async(list)(Route.objects.all().order_by('-created_at'))
@@ -186,19 +178,10 @@ async def handle_back_to_main(callback: CallbackQuery):
         reply_markup=get_admin_keyboard()
     )
 
-async def check_admin(user_id: int) -> bool:
-    """Проверяет, является ли пользователь администратором"""
-    user = await sync_to_async(User.objects.get)(telegram_id=user_id)
-    return user.is_admin if hasattr(user, 'is_admin') else False
-
 @router.callback_query(F.data == "create_point")
 async def handle_create_point(callback: CallbackQuery, state: FSMContext):
     """Начало создания новой точки"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     await state.set_state(RouteStates.waiting_for_point_name)
@@ -207,11 +190,7 @@ async def handle_create_point(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "create_route")
 async def handle_create_route(callback: CallbackQuery, state: FSMContext):
     """Начало создания нового маршрута"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     await state.set_state(RouteStates.waiting_for_route_name)
@@ -284,7 +263,15 @@ async def handle_route_name(message: Message, state: FSMContext):
             await route.asave()
             await message.answer("Название маршрута успешно обновлено.")
             await state.clear()
-            await handle_view_route(CallbackQuery(message=message, data=f"view_route:{route.id}"))
+            # Создаем правильный CallbackQuery объект
+            callback = CallbackQuery(
+                id=str(message.message_id),
+                from_user=message.from_user,
+                chat_instance=str(message.chat.id),
+                message=message,
+                data=f"view_route:{route.id}"
+            )
+            await handle_view_route(callback)
         except Route.DoesNotExist:
             await message.answer("Маршрут не найден.")
             await state.clear()
@@ -304,7 +291,15 @@ async def handle_route_description(message: Message, state: FSMContext):
             await route.asave()
             await message.answer("Описание маршрута успешно обновлено.")
             await state.clear()
-            await handle_view_route(CallbackQuery(message=message, data=f"view_route:{route.id}"))
+            # Создаем правильный CallbackQuery объект
+            callback = CallbackQuery(
+                id=str(message.message_id),
+                from_user=message.from_user,
+                chat_instance=str(message.chat.id),
+                message=message,
+                data=f"view_route:{route.id}"
+            )
+            await handle_view_route(callback)
         except Route.DoesNotExist:
             await message.answer("Маршрут не найден.")
             await state.clear()
@@ -344,11 +339,7 @@ async def handle_route_description(message: Message, state: FSMContext):
 @router.callback_query(F.data.startswith("add_pt:"))
 async def handle_add_point_to_route(callback: CallbackQuery, state: FSMContext):
     """Добавление точки в маршрут"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     short_route_id = callback.data.split(":")[1]
@@ -385,11 +376,7 @@ async def handle_add_point_to_route(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("sel_pt:"))
 async def handle_select_point_for_route(callback: CallbackQuery):
     """Обработка выбора точки для добавления в маршрут"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     _, short_route_id, short_point_id = callback.data.split(":")
@@ -416,19 +403,60 @@ async def handle_select_point_for_route(callback: CallbackQuery):
     await callback.message.answer(f"Точка '{point.name}' добавлена в маршрут '{route.name}'.")
     await handle_view_route(callback)
 
+@router.callback_query(F.data.startswith("view_route:"))
+async def handle_view_route(callback: CallbackQuery):
+    """Просмотр конкретного маршрута"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    short_route_id = callback.data.split(":")[1]
+    try:
+        route = await Route.objects.aget(id__startswith=short_route_id)
+    except Route.DoesNotExist:
+        await callback.message.answer("Маршрут не найден.")
+        return
+
+    text = f"🗺 Маршрут: {route.name}\n"
+    text += f"ID: {route.id}\n"
+    text += f"Описание: {route.description}\n"
+    text += f"Создан: {route.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+
+    # Получаем точки маршрута
+    route_points = await sync_to_async(list)(RoutePoint.objects.filter(route=route).order_by('order').select_related('point'))
+    if route_points:
+        text += "📍 Точки маршрута:\n"
+        for i, route_point in enumerate(route_points, 1):
+            text += f"{i}. {route_point.point.name}\n"
+    else:
+        text += "В маршруте пока нет точек.\n"
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit_rt:{short_route_id}"),
+                InlineKeyboardButton(text="🗑 Удалить", callback_data=f"del_rt:{short_route_id}")
+            ],
+            [
+                InlineKeyboardButton(text="➕ Добавить точку", callback_data=f"add_pt:{short_route_id}"),
+                InlineKeyboardButton(text="➖ Удалить точку", callback_data=f"remove_point_from_route:{short_route_id}")
+            ],
+            [
+                InlineKeyboardButton(text="🔙 Назад к списку", callback_data="list_routes")
+            ]
+        ]
+    )
+
+    await callback.message.answer(text, reply_markup=keyboard)
+
 @router.callback_query(F.data.startswith("remove_point_from_route:"))
 async def handle_remove_point_from_route(callback: CallbackQuery):
     """Удаление точки из маршрута"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
-    route_id = callback.data.split(":")[1]
+    short_route_id = callback.data.split(":")[1]
     try:
-        route = await Route.objects.aget(id=route_id)
+        route = await Route.objects.aget(id__startswith=short_route_id)
     except Route.DoesNotExist:
         await callback.message.answer("Маршрут не найден.")
         return
@@ -441,51 +469,56 @@ async def handle_remove_point_from_route(callback: CallbackQuery):
 
     keyboard = []
     for route_point in route_points:
+        short_point_id = str(route_point.point.id)[:8]
         keyboard.append([
             InlineKeyboardButton(
                 text=route_point.point.name,
-                callback_data=f"remove_point_from_route_confirm:{route.id}:{route_point.point.id}"
+                callback_data=f"rm_pt:{short_route_id}:{short_point_id}"
             )
         ])
-    keyboard.append([InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_route:{route.id}")])
+    keyboard.append([InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_route:{short_route_id}")])
 
     await callback.message.answer(
         "Выберите точку для удаления из маршрута:",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
     )
 
-@router.callback_query(F.data.startswith("remove_point_from_route_confirm:"))
+@router.callback_query(F.data.startswith("rm_pt:"))
 async def handle_remove_point_from_route_confirm(callback: CallbackQuery):
     """Подтверждение удаления точки из маршрута"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
-    _, route_id, point_id = callback.data.split(":")
+    _, short_route_id, short_point_id = callback.data.split(":")
     try:
-        route = await Route.objects.aget(id=route_id)
-        point = await Point.objects.aget(id=point_id)
-    except (Route.DoesNotExist, Point.DoesNotExist):
+        route = await Route.objects.aget(id__startswith=short_route_id)
+        point = await Point.objects.aget(id__startswith=short_point_id)
+        route_point = await sync_to_async(RoutePoint.objects.get)(route=route, point=point)
+    except (Route.DoesNotExist, Point.DoesNotExist, RoutePoint.DoesNotExist):
         await callback.message.answer("Маршрут или точка не найдены.")
         return
 
     # Удаляем связь
-    await sync_to_async(RoutePoint.objects.filter(route=route, point=point).delete)()
+    await sync_to_async(route_point.delete)()
 
-    await callback.message.answer(f"Точка '{point.name}' удалена из маршрута '{route.name}'.")
-    await handle_view_route(callback)
+    await callback.message.answer(
+        f"✅ Точка '{point.name}' успешно удалена из маршрута '{route.name}'",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🔙 Вернуться к маршруту",
+                        callback_data=f"view_route:{short_route_id}"
+                    )
+                ]
+            ]
+        )
+    )
 
 @router.callback_query(F.data.startswith("edit_rt:"))
 async def handle_edit_route(callback: CallbackQuery, state: FSMContext):
     """Начало редактирования маршрута"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     short_route_id = callback.data.split(":")[1]
@@ -518,6 +551,9 @@ async def handle_edit_route(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "edit_route_name")
 async def handle_edit_route_name(callback: CallbackQuery, state: FSMContext):
     """Редактирование названия маршрута"""
+    if not await check_admin(callback.from_user.id):
+        return
+
     data = await state.get_data()
     route_id = data.get('route_id')
     if not route_id:
@@ -526,11 +562,21 @@ async def handle_edit_route_name(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.set_state(RouteStates.waiting_for_route_name)
-    await callback.message.answer("Введите новое название маршрута:")
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_edit")
+            ]
+        ]
+    )
+    await callback.message.answer("Введите новое название маршрута:", reply_markup=keyboard)
 
 @router.callback_query(F.data == "edit_route_description")
 async def handle_edit_route_description(callback: CallbackQuery, state: FSMContext):
     """Редактирование описания маршрута"""
+    if not await check_admin(callback.from_user.id):
+        return
+
     data = await state.get_data()
     route_id = data.get('route_id')
     if not route_id:
@@ -539,16 +585,19 @@ async def handle_edit_route_description(callback: CallbackQuery, state: FSMConte
         return
 
     await state.set_state(RouteStates.waiting_for_route_description)
-    await callback.message.answer("Введите новое описание маршрута:")
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_edit")
+            ]
+        ]
+    )
+    await callback.message.answer("Введите новое описание маршрута:", reply_markup=keyboard)
 
 @router.callback_query(F.data.startswith("edit_pt:"))
 async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
     """Начало редактирования точки"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     short_point_id = callback.data.split(":")[1]
@@ -589,11 +638,7 @@ async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("del_pt:"))
 async def handle_delete_point(callback: CallbackQuery):
     """Удаление точки"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     short_point_id = callback.data.split(":")[1]
@@ -619,11 +664,7 @@ async def handle_delete_point(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("edit_pt_text:"))
 async def handle_edit_point_text(callback: CallbackQuery, state: FSMContext):
     """Редактирование текста точки"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     short_point_id = callback.data.split(":")[1]
@@ -640,11 +681,7 @@ async def handle_edit_point_text(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("edit_pt_photo:"))
 async def handle_edit_point_photo(callback: CallbackQuery, state: FSMContext):
     """Редактирование фото точки"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     short_point_id = callback.data.split(":")[1]
@@ -664,11 +701,7 @@ async def handle_edit_point_photo(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.startswith("edit_pt_audio:"))
 async def handle_edit_point_audio(callback: CallbackQuery, state: FSMContext):
     """Редактирование аудио точки"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     short_point_id = callback.data.split(":")[1]
@@ -688,11 +721,7 @@ async def handle_edit_point_audio(callback: CallbackQuery, state: FSMContext):
 @router.message(RouteStates.waiting_for_point_text)
 async def handle_point_text_edit(message: Message, state: FSMContext):
     """Сохранение нового текста точки"""
-    try:
-        user = await User.objects.aget(telegram_id=message.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(message.from_user.id):
         return
 
     data = await state.get_data()
@@ -728,11 +757,7 @@ async def handle_point_text_edit(message: Message, state: FSMContext):
 @router.message(RouteStates.waiting_for_point_photo, F.photo)
 async def handle_point_photo_edit(message: Message, state: FSMContext, bot):
     """Сохранение нового фото точки"""
-    try:
-        user = await User.objects.aget(telegram_id=message.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(message.from_user.id):
         return
 
     data = await state.get_data()
@@ -776,11 +801,7 @@ async def handle_point_photo_edit(message: Message, state: FSMContext, bot):
 @router.message(RouteStates.waiting_for_point_audio, F.audio)
 async def handle_point_audio_edit(message: Message, state: FSMContext, bot):
     """Сохранение нового аудио точки"""
-    try:
-        user = await User.objects.aget(telegram_id=message.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(message.from_user.id):
         return
 
     data = await state.get_data()
@@ -824,6 +845,9 @@ async def handle_point_audio_edit(message: Message, state: FSMContext, bot):
 @router.callback_query(F.data == "edit_point_name")
 async def handle_edit_point_name(callback: CallbackQuery, state: FSMContext):
     """Редактирование названия точки"""
+    if not await check_admin(callback.from_user.id):
+        return
+
     data = await state.get_data()
     point_id = data.get('point_id')
     if not point_id:
@@ -844,6 +868,9 @@ async def handle_edit_point_name(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "edit_point_description")
 async def handle_edit_point_description(callback: CallbackQuery, state: FSMContext):
     """Редактирование описания точки"""
+    if not await check_admin(callback.from_user.id):
+        return
+
     data = await state.get_data()
     point_id = data.get('point_id')
     if not point_id:
@@ -864,6 +891,9 @@ async def handle_edit_point_description(callback: CallbackQuery, state: FSMConte
 @router.callback_query(F.data == "edit_point_location")
 async def handle_edit_point_location(callback: CallbackQuery, state: FSMContext):
     """Редактирование локации точки"""
+    if not await check_admin(callback.from_user.id):
+        return
+
     data = await state.get_data()
     point_id = data.get('point_id')
     if not point_id:
@@ -888,11 +918,7 @@ async def handle_edit_point_location(callback: CallbackQuery, state: FSMContext)
 @router.message(RouteStates.editing_point_name)
 async def handle_point_name_edit(message: Message, state: FSMContext):
     """Сохранение нового названия точки"""
-    try:
-        user = await User.objects.aget(telegram_id=message.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(message.from_user.id):
         return
 
     data = await state.get_data()
@@ -928,11 +954,7 @@ async def handle_point_name_edit(message: Message, state: FSMContext):
 @router.message(RouteStates.editing_point_description)
 async def handle_point_description_edit(message: Message, state: FSMContext):
     """Сохранение нового описания точки"""
-    try:
-        user = await User.objects.aget(telegram_id=message.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(message.from_user.id):
         return
 
     data = await state.get_data()
@@ -968,11 +990,7 @@ async def handle_point_description_edit(message: Message, state: FSMContext):
 @router.message(RouteStates.editing_point_location, F.location)
 async def handle_point_location_edit(message: Message, state: FSMContext):
     """Сохранение новой локации точки"""
-    try:
-        user = await User.objects.aget(telegram_id=message.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(message.from_user.id):
         return
 
     data = await state.get_data()
@@ -1006,216 +1024,10 @@ async def handle_point_location_edit(message: Message, state: FSMContext):
     )
     await handle_view_point(new_callback)
 
-@router.callback_query(F.data.startswith("view_route:"))
-async def handle_view_route(callback: CallbackQuery):
-    """Просмотр конкретного маршрута"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
-        return
-
-    short_route_id = callback.data.split(":")[1]
-    try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
-    except Route.DoesNotExist:
-        await callback.message.answer("Маршрут не найден.")
-        return
-
-    text = f"🗺 Маршрут: {route.name}\n"
-    text += f"ID: {route.id}\n"
-    text += f"Описание: {route.description}\n"
-    text += f"Создан: {route.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-
-    # Получаем точки маршрута
-    route_points = await sync_to_async(list)(RoutePoint.objects.filter(route=route).order_by('order').select_related('point'))
-    if route_points:
-        text += "📍 Точки маршрута:\n"
-        for i, route_point in enumerate(route_points, 1):
-            text += f"{i}. {route_point.point.name}\n"
-    else:
-        text += "В маршруте пока нет точек.\n"
-
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit_rt:{short_route_id}"),
-                InlineKeyboardButton(text="🗑 Удалить", callback_data=f"del_rt:{short_route_id}")
-            ],
-            [
-                InlineKeyboardButton(text="➕ Добавить точку", callback_data=f"add_pt:{short_route_id}"),
-                InlineKeyboardButton(text="➖ Удалить точку", callback_data=f"rem_pt:{short_route_id}")
-            ],
-            [
-                InlineKeyboardButton(text="🔙 Назад к списку", callback_data="list_routes")
-            ]
-        ]
-    )
-
-    await callback.message.answer(text, reply_markup=keyboard)
-
-@router.callback_query(F.data.startswith("rem_pt:"))
-async def handle_remove_point_from_route(callback: CallbackQuery):
-    """Удаление точки из маршрута"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
-        return
-
-    short_route_id = callback.data.split(":")[1]
-    try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
-    except Route.DoesNotExist:
-        await callback.message.answer("Маршрут не найден.")
-        return
-
-    # Получаем все точки маршрута
-    route_points = await sync_to_async(list)(RoutePoint.objects.filter(route=route).select_related('point').order_by('order'))
-    if not route_points:
-        await callback.message.answer("В маршруте нет точек.")
-        return
-
-    keyboard = []
-    for route_point in route_points:
-        short_point_id = str(route_point.point.id)[:8]
-        keyboard.append([
-            InlineKeyboardButton(
-                text=route_point.point.name,
-                callback_data=f"rem_pt_confirm:{short_route_id}:{short_point_id}"
-            )
-        ])
-    keyboard.append([InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_route:{short_route_id}")])
-
-    await callback.message.answer(
-        "Выберите точку для удаления из маршрута:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
-    )
-
-@router.callback_query(F.data.startswith("rem_pt_confirm:"))
-async def handle_remove_point_from_route_confirm(callback: CallbackQuery):
-    """Подтверждение удаления точки из маршрута"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
-        return
-
-    _, short_route_id, short_point_id = callback.data.split(":")
-    try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
-        point = await Point.objects.aget(id__startswith=short_point_id)
-    except (Route.DoesNotExist, Point.DoesNotExist):
-        await callback.message.answer("Маршрут или точка не найдены.")
-        return
-
-    # Удаляем связь
-    await sync_to_async(RoutePoint.objects.filter(route=route, point=point).delete)()
-
-    await callback.message.answer(f"Точка '{point.name}' успешно удалена из маршрута '{route.name}'.")
-    
-    # Создаем новый callback query с правильными параметрами
-    new_callback = CallbackQuery(
-        id=callback.id,
-        from_user=callback.from_user,
-        chat_instance=callback.chat_instance,
-        message=callback.message,
-        data=f"view_route:{short_route_id}"
-    )
-    await handle_view_route(new_callback)
-
-@router.callback_query(F.data == "cancel_edit")
-async def handle_cancel_edit(callback: CallbackQuery, state: FSMContext):
-    """Отмена редактирования"""
-    try:
-        data = await state.get_data()
-        point_id = data.get('point_id')
-        route_id = data.get('route_id')
-        
-        await state.clear()
-        
-        if point_id:
-            short_point_id = str(point_id)[:8]
-            await handle_view_point(CallbackQuery(message=callback.message, data=f"view_pt:{short_point_id}"))
-        elif route_id:
-            short_route_id = str(route_id)[:8]
-            await handle_view_route(CallbackQuery(message=callback.message, data=f"view_route:{short_route_id}"))
-    except Exception as e:
-        await callback.message.answer("Произошла ошибка при отмене редактирования.")
-        await state.clear()
-
-@router.callback_query(F.data == "edit_route_name")
-async def handle_edit_route_name(callback: CallbackQuery, state: FSMContext):
-    """Редактирование названия маршрута"""
-    data = await state.get_data()
-    route_id = data.get('route_id')
-    if not route_id:
-        await callback.message.answer("Ошибка: маршрут не найден.")
-        await state.clear()
-        return
-
-    await state.set_state(RouteStates.waiting_for_route_name)
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_edit")
-            ]
-        ]
-    )
-    await callback.message.answer("Введите новое название маршрута:", reply_markup=keyboard)
-
-@router.callback_query(F.data == "edit_route_description")
-async def handle_edit_route_description(callback: CallbackQuery, state: FSMContext):
-    """Редактирование описания маршрута"""
-    data = await state.get_data()
-    route_id = data.get('route_id')
-    if not route_id:
-        await callback.message.answer("Ошибка: маршрут не найден.")
-        await state.clear()
-        return
-
-    await state.set_state(RouteStates.waiting_for_route_description)
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_edit")
-            ]
-        ]
-    )
-    await callback.message.answer("Введите новое описание маршрута:", reply_markup=keyboard)
-
-@router.callback_query(F.data.startswith("del_rt:"))
-async def handle_delete_route(callback: CallbackQuery):
-    """Удаление маршрута"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
-        return
-
-    short_route_id = callback.data.split(":")[1]
-    try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
-    except Route.DoesNotExist:
-        await callback.message.answer("Маршрут не найден.")
-        return
-
-    await route.adelete()
-    await callback.message.answer("Маршрут успешно удален.")
-    await handle_list_routes_callback(callback)
-
 @router.callback_query(F.data.startswith("view_pt:"))
 async def handle_view_point(callback: CallbackQuery):
     """Просмотр конкретной точки"""
-    try:
-        user = await User.objects.aget(telegram_id=callback.from_user.id)
-        if not user.is_admin:
-            return
-    except User.DoesNotExist:
+    if not await check_admin(callback.from_user.id):
         return
 
     short_point_id = callback.data.split(":")[1]
@@ -1272,4 +1084,61 @@ async def handle_view_point(callback: CallbackQuery):
     await callback.message.answer(
         "Выберите действие:",
         reply_markup=keyboard
-    ) 
+    )
+
+@router.callback_query(F.data.startswith("del_rt:"))
+async def handle_delete_route(callback: CallbackQuery):
+    """Удаление маршрута"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    short_route_id = callback.data.split(":")[1]
+    try:
+        route = await Route.objects.aget(id__startswith=short_route_id)
+    except Route.DoesNotExist:
+        await callback.message.answer("Маршрут не найден.")
+        return
+
+    await route.adelete()
+    await callback.message.answer("Маршрут успешно удален.")
+    await handle_list_routes_callback(callback)
+
+@router.callback_query(F.data == "cancel_edit")
+async def handle_cancel_edit(callback: CallbackQuery, state: FSMContext):
+    """Отмена редактирования"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    try:
+        data = await state.get_data()
+        point_id = data.get('point_id')
+        route_id = data.get('route_id')
+        
+        await state.clear()
+        
+        if point_id:
+            short_point_id = str(point_id)[:8]
+            await handle_view_point(CallbackQuery(message=callback.message, data=f"view_pt:{short_point_id}"))
+        elif route_id:
+            short_route_id = str(route_id)[:8]
+            await handle_view_route(CallbackQuery(message=callback.message, data=f"view_route:{short_route_id}"))
+    except Exception as e:
+        await callback.message.answer("Произошла ошибка при отмене редактирования.")
+        await state.clear()
+
+@router.callback_query(F.data.startswith("del_rt:"))
+async def handle_delete_route(callback: CallbackQuery):
+    """Удаление маршрута"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    short_route_id = callback.data.split(":")[1]
+    try:
+        route = await Route.objects.aget(id__startswith=short_route_id)
+    except Route.DoesNotExist:
+        await callback.message.answer("Маршрут не найден.")
+        return
+
+    await route.adelete()
+    await callback.message.answer("Маршрут успешно удален.")
+    await handle_list_routes_callback(callback) 
