@@ -1,8 +1,10 @@
-from aiogram import types
+from aiogram import types, Router, F
 from aiogram.filters import Command, CommandObject
 from asgiref.sync import sync_to_async
-from core.models import UserQuestProgress, PromoCode
+from core.models import UserQuestProgress, PromoCode, User
 from django.conf import settings
+
+router = Router()
 
 async def check_admin_group(message: types.Message) -> bool:
     """Проверяет, что сообщение пришло из группы администраторов"""
@@ -110,4 +112,83 @@ async def handle_reject(message: types.Message, command: CommandObject):
         "Вы можете попробовать выполнить квест ещё раз."
     )
 
-    await message.reply("❌ Квест отклонен, уведомление отправлено пользователю") 
+    await message.reply("❌ Квест отклонен, уведомление отправлено пользователю")
+
+@router.message(Command("make_admin"))
+async def cmd_make_admin(message: types.Message):
+    """Назначение пользователя администратором"""
+    # Проверяем, является ли отправитель уже администратором
+    sender = await User.objects.aget(telegram_id=message.from_user.id)
+    if not sender.is_admin:
+        await message.answer("У вас нет прав для назначения администраторов.")
+        return
+
+    # Проверяем, есть ли ID пользователя в сообщении
+    try:
+        user_id = int(message.text.split()[1])
+    except (IndexError, ValueError):
+        await message.answer(
+            "Использование: /make_admin <ID пользователя>\n"
+            "ID пользователя можно получить, переслав его сообщение боту @getidsbot"
+        )
+        return
+
+    # Находим пользователя и делаем его администратором
+    try:
+        user = await User.objects.aget(telegram_id=user_id)
+        user.is_admin = True
+        await user.asave()
+        await message.answer(f"✅ Пользователь {user.name} теперь администратор!")
+    except User.DoesNotExist:
+        await message.answer("❌ Пользователь не найден.")
+
+@router.message(Command("remove_admin"))
+async def cmd_remove_admin(message: types.Message):
+    """Снятие прав администратора"""
+    # Проверяем, является ли отправитель администратором
+    sender = await User.objects.aget(telegram_id=message.from_user.id)
+    if not sender.is_admin:
+        await message.answer("У вас нет прав для снятия прав администратора.")
+        return
+
+    # Проверяем, есть ли ID пользователя в сообщении
+    try:
+        user_id = int(message.text.split()[1])
+    except (IndexError, ValueError):
+        await message.answer(
+            "Использование: /remove_admin <ID пользователя>\n"
+            "ID пользователя можно получить, переслав его сообщение боту @getidsbot"
+        )
+        return
+
+    # Находим пользователя и снимаем права администратора
+    try:
+        user = await User.objects.aget(telegram_id=user_id)
+        user.is_admin = False
+        await user.asave()
+        await message.answer(f"✅ Пользователь {user.name} больше не администратор.")
+    except User.DoesNotExist:
+        await message.answer("❌ Пользователь не найден.")
+
+@router.message(Command("list_admins"))
+async def cmd_list_admins(message: types.Message):
+    """Показать список всех администраторов"""
+    # Проверяем, является ли отправитель администратором
+    sender = await User.objects.aget(telegram_id=message.from_user.id)
+    if not sender.is_admin:
+        await message.answer("У вас нет прав для просмотра списка администраторов.")
+        return
+
+    # Получаем список всех администраторов
+    admins = await User.objects.filter(is_admin=True).all()
+    if not admins:
+        await message.answer("Список администраторов пуст.")
+        return
+
+    text = "👥 Список администраторов:\n\n"
+    for admin in admins:
+        text += f"• {admin.name} (ID: {admin.telegram_id})\n"
+        text += f"  Телефон: {admin.phone_number or 'Не указан'}\n"
+        text += f"  Создан: {admin.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+
+    await message.answer(text) 

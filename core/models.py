@@ -8,6 +8,7 @@ class User(models.Model):
     name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     is_verified = models.BooleanField(default=False)
+    is_admin = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -58,4 +59,47 @@ class UserQuestProgress(models.Model):
         unique_together = ('user', 'quest')
 
     def __str__(self):
-        return f"{self.user.name} - {self.quest.name} ({self.status})" 
+        return f"{self.user.name} - {self.quest.name} ({self.status})"
+
+
+class Point(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    description = models.TextField()
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    text_content = models.TextField(blank=True, null=True)
+    audio_file = models.FileField(upload_to='points/audio/', blank=True, null=True)
+    photo = models.ImageField(upload_to='points/photos/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_points')
+
+    def __str__(self):
+        return self.name
+
+
+class Route(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+    description = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_routes')
+    points = models.ManyToManyField(Point, through='RoutePoint')
+
+    def __str__(self):
+        return self.name
+
+
+class RoutePoint(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    route = models.ForeignKey(Route, on_delete=models.CASCADE)
+    point = models.ForeignKey(Point, on_delete=models.CASCADE)
+    order = models.IntegerField()  # Порядок точки в маршруте
+
+    class Meta:
+        ordering = ['order']
+        unique_together = ('route', 'point')
+
+    def __str__(self):
+        return f"{self.point.name} (Маршрут: {self.route.name}, порядок: {self.order})" 
