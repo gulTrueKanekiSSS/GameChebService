@@ -4,15 +4,22 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters.command import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.client.default import DefaultBotProperties
-from core.models import User
+from core.models import User, RoutePoint, Route, Point
 from dotenv import load_dotenv
 from asgiref.sync import sync_to_async
 from aiogram.types import WebAppInfo
 from django.conf import settings
+from aiogram.types.input_file import FSInputFile
+
 
 # Импортируем административные команды
 from . import admin_commands
 from . import route_handlers
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+
+class RouteState(StatesGroup):
+    waiting_for_next_point = State()
 
 # Явно загружаем переменные окружения
 load_dotenv(override=True)
@@ -39,7 +46,7 @@ def get_main_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [
-                KeyboardButton(text="🎯 Получить квест"),
+                KeyboardButton(text="🎯 Получить маршрут"),
                 KeyboardButton(text="🎁 Мои промокоды")
             ]
         ],
@@ -55,7 +62,7 @@ def get_admin_keyboard():
                 KeyboardButton(text="📍 Точки")
             ],
             [
-                KeyboardButton(text="🎯 Получить квест"),
+                KeyboardButton(text="🎯 Получить маршрут"),
                 KeyboardButton(text="🎁 Мои промокоды")
             ]
         ],
@@ -67,6 +74,38 @@ def get_admin_keyboard():
 WEBAPP_URL = "https://280e96efed85bc66d099b6f91fe347d6.serveo.net"
 
 
+# @dp.message(Command("start"))
+# async def cmd_start(message: types.Message):
+#     get_or_create = sync_to_async(User.objects.get_or_create)
+#     user, created = await get_or_create(
+#         telegram_id=message.from_user.id,
+#         defaults={
+#             'name': message.from_user.full_name,
+#             'is_admin': message.from_user.id in settings.ADMIN_IDS  # Автоматически назначаем администратором
+#         }
+#     )
+#
+#     if user.is_verified:
+#         reply_markup = get_admin_keyboard() if user.is_admin else get_main_keyboard()
+#         await message.answer("Добро пожаловать обратно! Чем могу помочь?", reply_markup=reply_markup)
+#         return
+#
+#
+#     # Если пользователь уже существовал, проверяем его права администратора
+#     if not created and not user.is_admin:
+#         user.is_admin = message.from_user.id in settings.ADMIN_IDS
+#         await sync_to_async(user.save)()
+#
+#
+#     contact_keyboard = ReplyKeyboardMarkup(
+#         keyboard=[[KeyboardButton(text="📱 Отправить номер телефона", request_contact=True)]],
+#         resize_keyboard=True
+#     )
+#     await message.answer(
+#         "Добро пожаловать! Для начала работы, пожалуйста, поделитесь своим номером телефона.",
+#         reply_markup=contact_keyboard
+#     )
+
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     get_or_create = sync_to_async(User.objects.get_or_create)
@@ -74,14 +113,15 @@ async def cmd_start(message: types.Message):
         telegram_id=message.from_user.id,
         defaults={
             'name': message.from_user.full_name,
-            'is_admin': message.from_user.id in settings.ADMIN_IDS  # Автоматически назначаем администратором
+            'is_admin': message.from_user.id in settings.ADMIN_IDS
         }
     )
 
-    # Если пользователь уже существовал, проверяем его права администратора
-    if not created and not user.is_admin:
-        user.is_admin = message.from_user.id in settings.ADMIN_IDS
-        await sync_to_async(user.save)()
+    # Если пользователь уже верифицирован, не запрашиваем номер телефона повторно
+    if user.is_verified:
+        reply_markup = get_admin_keyboard() if user.is_admin else get_main_keyboard()
+        await message.answer("Добро пожаловать обратно! Чем могу помочь?", reply_markup=reply_markup)
+        return
 
     contact_keyboard = ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="📱 Отправить номер телефона", request_contact=True)]],
@@ -91,6 +131,7 @@ async def cmd_start(message: types.Message):
         "Добро пожаловать! Для начала работы, пожалуйста, поделитесь своим номером телефона.",
         reply_markup=contact_keyboard
     )
+
 
 @dp.message(lambda message: message.contact is not None)
 async def handle_contact(message: types.Message):
@@ -114,6 +155,216 @@ async def handle_contact(message: types.Message):
         "Спасибо! Теперь вы можете начать выполнять квесты.",
         reply_markup=reply_markup
     )
+
+
+@dp.message(F.text == "🎯 Получить маршрут")
+async def handle_get_routes(message: types.Message):
+    get_routes = sync_to_async(lambda: list(Route.objects.filter(is_active=True)))
+    routes = await get_routes()
+
+    if not routes:
+        await message.answer("Нет доступных маршрутов на данный момент.")
+        return
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[])
+    for route in routes:
+        keyboard.inline_keyboard.append([InlineKeyboardButton(text=route.name, callback_data=f"route_{route.id}")])
+
+    await message.answer("Выберите маршрут:", reply_markup=keyboard)
+
+
+@dp.callback_query(lambda c: c.data.startswith("route_"))
+async def handle_route_selection(callback_query: types.CallbackQuery, state: FSMContext):
+    route_id = callback_query.data.split("_")[1]
+    get_route_points = sync_to_async(lambda: list(RoutePoint.objects.filter(route_id=route_id)))
+    route_points = await get_route_points()
+
+    if not route_points:
+        await callback_query.message.answer("Нет доступных точек для этого маршрута.")
+        return
+
+    # Сохраняем данные маршрута и текущий индекс
+    await state.update_data(current_index=1, route_points=route_points)
+
+    # Сразу отправляем первую точку
+    first_point = route_points[0]
+    get_point = sync_to_async(lambda: Point.objects.get(id=first_point.point_id))
+    point = await get_point()
+
+    if point.photo:
+        try:
+            await callback_query.message.answer_location(latitude=point.latitude, longitude=point.longitude)
+            await callback_query.message.answer_photo(
+                photo=FSInputFile(point.photo.path),
+                caption=f"📍 Точка: {point.name}\nОписание: {point.description}\nТекст: {point.text_content if point.text_content else 'Нет'}"
+            )
+        except Exception as e:
+            logging.error(f"Ошибка при отправке фото: {e}")
+
+    if point.audio_file:
+        try:
+            await callback_query.message.answer_audio(
+                audio=FSInputFile(point.audio_file.path),
+                caption="Аудио для точки"
+            )
+        except Exception as e:
+            logging.error(f"Ошибка при отправке аудио: {e}")
+
+    await callback_query.message.answer(
+        "Начинаем маршрут. Нажмите 'Я прошел точку' для продолжения.",
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Я прошел точку")]], resize_keyboard=True)
+    )
+    await state.set_state(RouteState.waiting_for_next_point)
+    "Начинаем маршрут. Нажмите 'Я прошел точку' для продолжения.",
+    reply_markup = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Я прошел точку")]], resize_keyboard=True)
+
+    await state.set_state(RouteState.waiting_for_next_point)
+
+@dp.message(F.text == "Я прошел точку")
+async def handle_next_point(message: types.Message, state: FSMContext):
+    # Проверка состояния FSM
+    current_state = await state.get_state()
+    if current_state != RouteState.waiting_for_next_point.state:
+        await message.answer("Вы не в маршруте. Нажмите 'Я прошел точку' для продолжения.")
+        return
+    data = await state.get_data()
+    route_points = data.get('route_points', [])
+    current_index = data.get('current_index', 0)
+
+    if current_index >= len(route_points):
+        await message.answer("Маршрут завершен.", reply_markup=get_main_keyboard())
+        await state.clear()
+        return
+
+    route_point = route_points[current_index]
+    get_point = sync_to_async(lambda: Point.objects.get(id=route_point.point_id))
+    point = await get_point()
+    content = f"Точка: {point.name}\n\n{point.description}"
+    if point.photo:
+        try:
+            await message.answer_photo(
+                photo=FSInputFile(point.photo.path),
+                caption=f"📍 Точка: {point.name}\n"
+                        f"Описание: {point.description}\n"
+                        f"Координаты: {point.latitude}, {point.longitude}\n"
+                        f"Текст: {point.text_content if point.text_content else 'Нет'}\n"
+                        f"Аудио: {'Есть' if point.audio_file else 'Нет'}"
+            )
+        except Exception as e:
+            logging.error(f"Ошибка при отправке фото: {e}")
+            await message.answer("Не удалось загрузить фото точки.")
+        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
+        photo_url = base_url + point.photo.url
+        await message.answer_photo(photo=photo_url)
+        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
+        photo_url = base_url + settings.MEDIA_URL + point.photo.url
+        await message.answer_photo(photo=photo_url)
+        base_url = 'http://localhost:8000' + settings.MEDIA_URL if settings.DEBUG else settings.MEDIA_URL
+        photo_url = base_url + point.photo.url
+        await message.answer_photo(photo=photo_url)
+        photo_url = settings.MEDIA_URL + point.photo.url if settings.MEDIA_URL.startswith(
+            'http') else 'http://localhost:8000' + settings.MEDIA_URL + point.photo.url
+        await message.answer_photo(photo=photo_url)
+        await message.answer_photo(photo=point.photo.url)
+
+    if point.audio_file:
+        try:
+            await message.answer_audio(
+                audio=FSInputFile(point.audio_file.path),
+                caption="Аудио для точки"
+            )
+        except Exception as e:
+            logging.error(f"Ошибка при отправке аудио: {e}")
+            await message.answer("Не удалось загрузить аудио точки.")
+        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
+        audio_url = base_url + point.audio_file.url
+        await message.answer_audio(audio=audio_url)
+        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
+        audio_url = base_url + settings.MEDIA_URL + point.audio_file.url
+        await message.answer_audio(audio=audio_url)
+        base_url = 'http://localhost:8000' + settings.MEDIA_URL if settings.DEBUG else settings.MEDIA_URL
+        audio_url = base_url + point.audio_file.url
+        await message.answer_audio(audio=audio_url)
+        audio_url = settings.MEDIA_URL + point.audio_file.url if settings.MEDIA_URL.startswith(
+            'http') else 'http://localhost:8000' + settings.MEDIA_URL + point.audio_file.url
+        await message.answer_audio(audio=audio_url)
+        await message.answer_audio(audio=point.audio_file.url)
+
+    await message.answer(
+        f"📍 Точка: {point.name}\n"
+        f"Описание: {point.description}\n"
+        f"Координаты: {point.latitude}, {point.longitude}\n"
+        f"Текст: {point.text_content if point.text_content else 'Нет'}\n"
+        f"Аудио: {'Есть' if point.audio_file else 'Нет'}"
+    )
+
+    if point.photo:
+        try:
+            await message.answer_photo(
+                photo=FSInputFile(point.photo.path),
+                caption=f"📍 Точка: {point.name}\n"
+                        f"Описание: {point.description}\n"
+                        f"Координаты: {point.latitude}, {point.longitude}\n"
+                        f"Текст: {point.text_content if point.text_content else 'Нет'}\n"
+                        f"Аудио: {'Есть' if point.audio_file else 'Нет'}"
+            )
+        except Exception as e:
+            logging.error(f"Ошибка при отправке фото: {e}")
+            await message.answer("Не удалось загрузить фото точки.")
+        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
+        photo_url = base_url + point.photo.url
+        await message.answer_photo(photo=photo_url)
+        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
+        photo_url = base_url + settings.MEDIA_URL + point.photo.url
+        await message.answer_photo(photo=photo_url)
+        base_url = 'http://localhost:8000' + settings.MEDIA_URL if settings.DEBUG else settings.MEDIA_URL
+        photo_url = base_url + point.photo.url
+        await message.answer_photo(photo=photo_url)
+        photo_url = settings.MEDIA_URL + point.photo.url if settings.MEDIA_URL.startswith(
+            'http') else 'http://localhost:8000' + settings.MEDIA_URL + point.photo.url
+        await message.answer_photo(photo=photo_url)
+        await message.answer_photo(point.photo.url)
+
+    if point.audio_file:
+        try:
+            await message.answer_audio(
+                audio=FSInputFile(point.audio_file.path),
+                caption="Аудио для точки"
+            )
+        except Exception as e:
+            logging.error(f"Ошибка при отправке аудио: {e}")
+            await message.answer("Не удалось загрузить аудио точки.")
+        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
+        audio_url = base_url + point.audio_file.url
+        await message.answer_audio(audio=audio_url)
+        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
+        audio_url = base_url + settings.MEDIA_URL + point.audio_file.url
+        await message.answer_audio(audio=audio_url)
+        base_url = 'http://localhost:8000' + settings.MEDIA_URL if settings.DEBUG else settings.MEDIA_URL
+        audio_url = base_url + point.audio_file.url
+        await message.answer_audio(audio=audio_url)
+        audio_url = settings.MEDIA_URL + point.audio_file.url if settings.MEDIA_URL.startswith(
+            'http') else 'http://localhost:8000' + settings.MEDIA_URL + point.audio_file.url
+        await message.answer_audio(audio=audio_url)
+        await message.answer_audio(point.audio_file.url)
+
+    current_index += 1
+    await state.update_data(current_index=current_index)
+
+    # Проверяем, достигли ли конца маршрута
+    if current_index >= len(route_points):
+        await message.answer("Маршрут завершен.", reply_markup=get_main_keyboard())
+        await state.clear()
+        return
+    # Увеличиваем индекс для следующей точки
+    current_index += 1
+    await state.update_data(current_index=current_index)
+
+    # Проверяем, достигли ли конца маршрута
+    if current_index + 1 >= len(route_points):
+        await message.answer("Маршрут завершен.", reply_markup=get_main_keyboard())
+        await state.clear()
+        return
 
 async def start_bot():
     # Регистрируем хендлеры
