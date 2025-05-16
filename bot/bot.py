@@ -230,6 +230,7 @@ async def handle_next_point(message: types.Message, state: FSMContext):
     data = await state.get_data()
     route_points = data.get('route_points', [])
     current_index = data.get('current_index', 0)
+    print(current_index)
 
     if current_index >= len(route_points):
         await message.answer("Маршрут завершен.", reply_markup=get_main_keyboard())
@@ -253,20 +254,6 @@ async def handle_next_point(message: types.Message, state: FSMContext):
         except Exception as e:
             logging.error(f"Ошибка при отправке фото: {e}")
             await message.answer("Не удалось загрузить фото точки.")
-        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
-        photo_url = base_url + point.photo.url
-        await message.answer_photo(photo=photo_url)
-        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
-        photo_url = base_url + settings.MEDIA_URL + point.photo.url
-        await message.answer_photo(photo=photo_url)
-        base_url = 'http://localhost:8000' + settings.MEDIA_URL if settings.DEBUG else settings.MEDIA_URL
-        photo_url = base_url + point.photo.url
-        await message.answer_photo(photo=photo_url)
-        photo_url = settings.MEDIA_URL + point.photo.url if settings.MEDIA_URL.startswith(
-            'http') else 'http://localhost:8000' + settings.MEDIA_URL + point.photo.url
-        await message.answer_photo(photo=photo_url)
-        await message.answer_photo(photo=point.photo.url)
-
     if point.audio_file:
         try:
             await message.answer_audio(
@@ -276,77 +263,6 @@ async def handle_next_point(message: types.Message, state: FSMContext):
         except Exception as e:
             logging.error(f"Ошибка при отправке аудио: {e}")
             await message.answer("Не удалось загрузить аудио точки.")
-        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
-        audio_url = base_url + point.audio_file.url
-        await message.answer_audio(audio=audio_url)
-        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
-        audio_url = base_url + settings.MEDIA_URL + point.audio_file.url
-        await message.answer_audio(audio=audio_url)
-        base_url = 'http://localhost:8000' + settings.MEDIA_URL if settings.DEBUG else settings.MEDIA_URL
-        audio_url = base_url + point.audio_file.url
-        await message.answer_audio(audio=audio_url)
-        audio_url = settings.MEDIA_URL + point.audio_file.url if settings.MEDIA_URL.startswith(
-            'http') else 'http://localhost:8000' + settings.MEDIA_URL + point.audio_file.url
-        await message.answer_audio(audio=audio_url)
-        await message.answer_audio(audio=point.audio_file.url)
-
-    await message.answer(
-        f"📍 Точка: {point.name}\n"
-        f"Описание: {point.description}\n"
-        f"Координаты: {point.latitude}, {point.longitude}\n"
-        f"Текст: {point.text_content if point.text_content else 'Нет'}\n"
-        f"Аудио: {'Есть' if point.audio_file else 'Нет'}"
-    )
-
-    if point.photo:
-        try:
-            await message.answer_photo(
-                photo=FSInputFile(point.photo.path),
-                caption=f"📍 Точка: {point.name}\n"
-                        f"Описание: {point.description}\n"
-                        f"Координаты: {point.latitude}, {point.longitude}\n"
-                        f"Текст: {point.text_content if point.text_content else 'Нет'}\n"
-                        f"Аудио: {'Есть' if point.audio_file else 'Нет'}"
-            )
-        except Exception as e:
-            logging.error(f"Ошибка при отправке фото: {e}")
-            await message.answer("Не удалось загрузить фото точки.")
-        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
-        photo_url = base_url + point.photo.url
-        await message.answer_photo(photo=photo_url)
-        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
-        photo_url = base_url + settings.MEDIA_URL + point.photo.url
-        await message.answer_photo(photo=photo_url)
-        base_url = 'http://localhost:8000' + settings.MEDIA_URL if settings.DEBUG else settings.MEDIA_URL
-        photo_url = base_url + point.photo.url
-        await message.answer_photo(photo=photo_url)
-        photo_url = settings.MEDIA_URL + point.photo.url if settings.MEDIA_URL.startswith(
-            'http') else 'http://localhost:8000' + settings.MEDIA_URL + point.photo.url
-        await message.answer_photo(photo=photo_url)
-        await message.answer_photo(point.photo.url)
-
-    if point.audio_file:
-        try:
-            await message.answer_audio(
-                audio=FSInputFile(point.audio_file.path),
-                caption="Аудио для точки"
-            )
-        except Exception as e:
-            logging.error(f"Ошибка при отправке аудио: {e}")
-            await message.answer("Не удалось загрузить аудио точки.")
-        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
-        audio_url = base_url + point.audio_file.url
-        await message.answer_audio(audio=audio_url)
-        base_url = 'http://localhost:8000' if settings.DEBUG else settings.MEDIA_URL.rstrip('/')
-        audio_url = base_url + settings.MEDIA_URL + point.audio_file.url
-        await message.answer_audio(audio=audio_url)
-        base_url = 'http://localhost:8000' + settings.MEDIA_URL if settings.DEBUG else settings.MEDIA_URL
-        audio_url = base_url + point.audio_file.url
-        await message.answer_audio(audio=audio_url)
-        audio_url = settings.MEDIA_URL + point.audio_file.url if settings.MEDIA_URL.startswith(
-            'http') else 'http://localhost:8000' + settings.MEDIA_URL + point.audio_file.url
-        await message.answer_audio(audio=audio_url)
-        await message.answer_audio(point.audio_file.url)
 
     current_index += 1
     await state.update_data(current_index=current_index)
@@ -359,6 +275,7 @@ async def handle_next_point(message: types.Message, state: FSMContext):
     # Увеличиваем индекс для следующей точки
     current_index += 1
     await state.update_data(current_index=current_index)
+    data.get("current_index")
 
     # Проверяем, достигли ли конца маршрута
     if current_index + 1 >= len(route_points):
