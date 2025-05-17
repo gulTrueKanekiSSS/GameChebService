@@ -29,7 +29,7 @@ def get_admin_keyboard():
                 KeyboardButton(text="📍 Точки")
             ],
             [
-                KeyboardButton(text="🎯 Получить квест"),
+                KeyboardButton(text="🎯 Получить маршрут"),
                 KeyboardButton(text="🎁 Мои промокоды")
             ]
         ],

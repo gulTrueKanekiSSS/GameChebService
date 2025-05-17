@@ -71,38 +71,6 @@ def get_admin_keyboard():
 WEBAPP_URL = "https://280e96efed85bc66d099b6f91fe347d6.serveo.net"
 
 
-# @dp.message(Command("start"))
-# async def cmd_start(message: types.Message):
-#     get_or_create = sync_to_async(User.objects.get_or_create)
-#     user, created = await get_or_create(
-#         telegram_id=message.from_user.id,
-#         defaults={
-#             'name': message.from_user.full_name,
-#             'is_admin': message.from_user.id in settings.ADMIN_IDS  # Автоматически назначаем администратором
-#         }
-#     )
-#
-#     if user.is_verified:
-#         reply_markup = get_admin_keyboard() if user.is_admin else get_main_keyboard()
-#         await message.answer("Добро пожаловать обратно! Чем могу помочь?", reply_markup=reply_markup)
-#         return
-#
-#
-#     # Если пользователь уже существовал, проверяем его права администратора
-#     if not created and not user.is_admin:
-#         user.is_admin = message.from_user.id in settings.ADMIN_IDS
-#         await sync_to_async(user.save)()
-#
-#
-#     contact_keyboard = ReplyKeyboardMarkup(
-#         keyboard=[[KeyboardButton(text="📱 Отправить номер телефона", request_contact=True)]],
-#         resize_keyboard=True
-#     )
-#     await message.answer(
-#         "Добро пожаловать! Для начала работы, пожалуйста, поделитесь своим номером телефона.",
-#         reply_markup=contact_keyboard
-#     )
-
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     get_or_create = sync_to_async(User.objects.get_or_create)
