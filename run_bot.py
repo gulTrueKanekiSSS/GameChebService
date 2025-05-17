@@ -2,12 +2,16 @@ import asyncio
 import os
 import django
 from aiohttp import web
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Указываем путь к settings.py
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
 django.setup()
 
-from bot.bot import start_bot  # Импорт `start_bot` не инициирует загрузку токена
+from bot.bot import start_bot
 
 async def simple_web_server():
     """Простой HTTP-сервер для Render."""
@@ -20,19 +24,24 @@ async def simple_web_server():
 
 async def main():
     """Основная точка входа."""
-    # Запуск бота
-    asyncio.create_task(start_bot())
+    try:
+        # Запуск бота как фоновая задача
+        asyncio.create_task(start_bot())
 
-    # Запуск HTTP-сервера
-    port = int(os.getenv("PORT", 8000))
-    runner = web.AppRunner(await simple_web_server())
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
+        # Запуск HTTP-сервера
+        port = int(os.getenv("PORT", 8000))
+        runner = web.AppRunner(await simple_web_server())
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", port)
+        await site.start()
 
-    # Поддерживаем приложение в живом состоянии
-    while True:
-        await asyncio.sleep(3600)
+        logger.info(f"HTTP сервер запущен на порту {port}")
+
+        while True:
+            await asyncio.sleep(3600)
+
+    except Exception as e:
+        logger.error(f"Ошибка в main(): {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
