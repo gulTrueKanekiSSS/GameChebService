@@ -7,7 +7,7 @@ from aiohttp import web
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
 django.setup()
 
-from bot.bot import start_bot  # Импорт твоей start_bot функции
+from bot.bot import start_bot  # Импорт `start_bot` не инициирует загрузку токена
 
 async def simple_web_server():
     """Простой HTTP-сервер для Render."""

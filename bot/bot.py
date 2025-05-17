@@ -31,11 +31,8 @@ logger = logging.getLogger(__name__)
 token = os.getenv('TELEGRAM_BOT_TOKEN')
 
 # Инициализируем бота и диспетчер с новым синтаксисом
-bot = Bot(
-    token=token,
-    default=DefaultBotProperties(parse_mode="HTML")
-)
 dp = Dispatcher()
+bot = None
 
 # Регистрируем административные команды
 dp.message.register(admin_commands.handle_approve, Command("approve"))
@@ -284,19 +281,31 @@ async def handle_next_point(message: types.Message, state: FSMContext):
         return
 
 async def start_bot():
+    """Функция запуска бота."""
+    global bot
+
+    # Явно загружаем переменные окружения
+    load_dotenv(override=True)
+    token = os.getenv('TELEGRAM_BOT_TOKEN')
+
+    # Проверка наличия токена
+    if not token:
+        logger.error("TELEGRAM_BOT_TOKEN не найден в .env")
+        return
+
+    # Инициализация бота и диспетчера
+    bot = Bot(token=token, default=DefaultBotProperties(parse_mode="HTML"))
+
     # Регистрируем хендлеры
     dp.message.register(cmd_start, Command("start"))
     dp.message.register(handle_contact, lambda message: message.contact is not None)
-    
-    # Регистрируем обработчики для управления маршрутами и точками
     dp.message.register(route_handlers.handle_routes_menu, F.text == "🗺 Маршруты")
     dp.message.register(route_handlers.handle_points_menu, F.text == "📍 Точки")
-    
-    # Регистрируем все роутеры
+
     register_handlers(dp)
-    
+
     try:
-        # Запускаем бота
+        logger.info("Запуск long polling...")
         await dp.start_polling(bot, skip_updates=True)
     except Exception as e:
         logger.error(f"Ошибка при запуске бота: {e}")
