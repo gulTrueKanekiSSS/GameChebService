@@ -4,6 +4,9 @@ import django
 import sys
 import logging
 from pathlib import Path
+from aiohttp import web
+import psutil
+import signal
 
 # Настройка логирования
 logging.basicConfig(
@@ -34,14 +37,60 @@ def remove_lock_file(lock_file):
     except Exception as e:
         logger.error(f"Ошибка при удалении файла блокировки: {e}")
 
+def terminate_existing_process():
+    """Завершает уже запущенные процессы run_bot.py."""
+    current_pid = os.getpid()
+    current_script = sys.argv[0]
+
+    for proc in psutil.process_iter(['pid', 'cmdline']):
+        try:
+            if proc.info['pid'] != current_pid and proc.info.get('cmdline') and current_script in proc.info['cmdline']:
+                logger.warning(f"Завершаем процесс {proc.info['pid']}.")
+                os.kill(proc.info['pid'], signal.SIGTERM)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+async def simple_web_server():
+    """Простой HTTP-сервер для Render."""
+    async def handle(request):
+        return web.Response(text="Bot is running")
+
+    app = web.Application()
+    app.router.add_get("/", handle)
+    return app
+
 async def main():
-    lock_file = create_lock_file()
-    try:
-        await start_bot()
-    except Exception as e:
-        logger.error(f"Критическая ошибка в работе бота: {e}")
-    finally:
-        remove_lock_file(lock_file)
+    """Основная точка входа."""
+    is_production = os.getenv("RENDER") == "true"
+
+    if is_production:
+        terminate_existing_process()
+        try:
+            # Запуск бота как фоновая задача
+            asyncio.create_task(start_bot())
+
+            # Запуск HTTP-сервера
+            port = int(os.getenv("PORT", 8000))
+            runner = web.AppRunner(await simple_web_server())
+            await runner.setup()
+            site = web.TCPSite(runner, "0.0.0.0", port)
+            await site.start()
+
+            logger.info(f"HTTP сервер запущен на порту {port}")
+
+            while True:
+                await asyncio.sleep(3600)
+
+        except Exception as e:
+            logger.error(f"Ошибка в main(): {e}")
+    else:
+        lock_file = create_lock_file()
+        try:
+            await start_bot()
+        except Exception as e:
+            logger.error(f"Критическая ошибка в работе бота: {e}")
+        finally:
+            remove_lock_file(lock_file)
 
 if __name__ == "__main__":
     try:
