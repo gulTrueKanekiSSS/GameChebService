@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from asgiref.sync import sync_to_async
 from aiogram.types import WebAppInfo
 from django.conf import settings
+import asyncio
 
 # Импортируем административные команды
 from . import admin_commands
@@ -127,12 +128,21 @@ async def start_bot():
     # Регистрируем все роутеры
     register_handlers(dp)
     
-    try:
-        # Запускаем бота
-        await dp.start_polling(bot, skip_updates=True)
-    except Exception as e:
-        logger.error(f"Ошибка при запуске бота: {e}")
-        raise
+    max_retries = 3
+    retry_delay = 5  # секунды
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Запуск бота (попытка {attempt + 1}/{max_retries})")
+            await dp.start_polling(bot, skip_updates=True)
+        except Exception as e:
+            logger.error(f"Ошибка при запуске бота (попытка {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                logger.info(f"Повторная попытка через {retry_delay} секунд...")
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error("Достигнуто максимальное количество попыток. Бот остановлен.")
+                raise
 
 from bot.admin_commands import router as admin_router
 from bot.route_handlers import router as route_router
