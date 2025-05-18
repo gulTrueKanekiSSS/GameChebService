@@ -11,6 +11,7 @@ from aiogram.types import WebAppInfo
 from django.conf import settings
 from aiogram.types.input_file import FSInputFile
 
+import asyncio
 
 # Импортируем административные команды
 from . import admin_commands
@@ -290,13 +291,22 @@ async def start_bot():
     dp.message.register(route_handlers.handle_points_menu, F.text == "📍 Точки")
 
     register_handlers(dp)
-
-    try:
-        logger.info("Запуск long polling...")
-        await dp.start_polling(bot, skip_updates=True)
-    except Exception as e:
-        logger.error(f"Ошибка при запуске бота: {e}")
-        raise
+    
+    max_retries = 3
+    retry_delay = 5  # секунды
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Запуск бота (попытка {attempt + 1}/{max_retries})")
+            await dp.start_polling(bot, skip_updates=True)
+        except Exception as e:
+            logger.error(f"Ошибка при запуске бота (попытка {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                logger.info(f"Повторная попытка через {retry_delay} секунд...")
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error("Достигнуто максимальное количество попыток. Бот остановлен.")
+                raise
 
 from bot.admin_commands import router as admin_router
 from bot.route_handlers import router as route_router
