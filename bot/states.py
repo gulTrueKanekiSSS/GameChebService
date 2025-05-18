@@ -21,6 +21,7 @@ class RouteStates(StatesGroup):
     waiting_for_point_text = State()
     waiting_for_point_photo = State()
     waiting_for_point_audio = State()
+    waiting_for_point_video = State()
 
     # Состояния для редактирования маршрута
     editing_route = State() 

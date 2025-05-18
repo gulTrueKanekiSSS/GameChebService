@@ -175,6 +175,15 @@ async def handle_route_selection(callback_query: types.CallbackQuery, state: FSM
         except Exception as e:
             logging.error(f"Ошибка при отправке аудио: {e}")
 
+    if point.video_file:
+        try:
+            await callback_query.message.answer_video(
+                video=FSInputFile(point.video_file.path),
+                caption="Видео для точки"
+            )
+        except Exception as e:
+            logging.error(f"Ошибка при отправке видео: {e}")
+
     await callback_query.message.answer(
         "Начинаем маршрут. Нажмите 'Я прошел точку' для продолжения.",
         reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Я прошел точку")]], resize_keyboard=True)
@@ -219,6 +228,16 @@ async def handle_next_point(message: types.Message, state: FSMContext):
         except Exception as e:
             logging.error(f"Ошибка при отправке фото: {e}")
             await message.answer("Не удалось загрузить фото точки.")
+    if point.video_file:
+        try:
+            await message.answer_video(
+                video=FSInputFile(point.video_file.path),
+                caption="Видео для точки"
+            )
+        except Exception as e:
+            logging.error(f"Ошибка при отправке видео: {e}")
+            await message.answer("Не удалось загрузить видео точки.")
+
     if point.audio_file:
         try:
             await message.answer_audio(

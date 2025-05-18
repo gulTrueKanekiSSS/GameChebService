@@ -74,6 +74,9 @@ class Point(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_points')
 
+    video_file = models.FileField(upload_to='points/videos/', null=True, blank=True)
+
+
     def __str__(self):
         return self.name
 
