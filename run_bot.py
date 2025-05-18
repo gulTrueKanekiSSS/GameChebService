@@ -3,6 +3,9 @@ import os
 import django
 from aiohttp import web
 import logging
+import psutil
+import sys
+import signal
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -12,6 +15,19 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
 django.setup()
 
 from bot.bot import start_bot
+
+def terminate_existing_process():
+    """Завершает уже запущенные процессы run_bot.py."""
+    current_pid = os.getpid()
+    current_script = sys.argv[0]
+
+    for proc in psutil.process_iter(['pid', 'cmdline']):
+        try:
+            if proc.info['pid'] != current_pid and current_script in proc.info['cmdline']:
+                logger.warning(f"Завершаем процесс {proc.info['pid']}.")
+                os.kill(proc.info['pid'], signal.SIGTERM)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
 
 async def simple_web_server():
     """Простой HTTP-сервер для Render."""
@@ -24,6 +40,8 @@ async def simple_web_server():
 
 async def main():
     """Основная точка входа."""
+    terminate_existing_process()
+
     try:
         # Запуск бота как фоновая задача
         asyncio.create_task(start_bot())
