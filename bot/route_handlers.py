@@ -7,6 +7,7 @@ from asgiref.sync import sync_to_async
 from core.models import User, Route, RoutePoint, Point
 from django.conf import settings
 from django.core.paginator import Paginator
+import logging
 
 from bot.states import RouteStates
 
@@ -628,6 +629,9 @@ async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
                 InlineKeyboardButton(text="🎵 Аудио", callback_data=f"edit_pt_audio:{short_point_id}")
             ],
             [
+                InlineKeyboardButton(text="🎥 Видео", callback_data=f"edit_pt_video:{short_point_id}")
+            ],
+            [
                 InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_pt:{short_point_id}")
             ]
         ]
@@ -683,7 +687,7 @@ async def handle_edit_point_text(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("edit_pt_photo:"))
 async def handle_edit_point_photo(callback: CallbackQuery, state: FSMContext):
-    """Редактирование фото точки"""
+    """Начало редактирования фото точки"""
     if not await check_admin(callback.from_user.id):
         return
 
@@ -700,62 +704,6 @@ async def handle_edit_point_photo(callback: CallbackQuery, state: FSMContext):
         "Отправьте новое фото для точки.\n"
         "Нажмите на кнопку 📎 и выберите 'Фото'"
     )
-
-@router.callback_query(F.data.startswith("edit_pt_audio:"))
-async def handle_edit_point_audio(callback: CallbackQuery, state: FSMContext):
-    """Редактирование аудио точки"""
-    if not await check_admin(callback.from_user.id):
-        return
-
-    short_point_id = callback.data.split(":")[1]
-    try:
-        point = await Point.objects.aget(id__startswith=short_point_id)
-    except Point.DoesNotExist:
-        await callback.message.answer("Точка не найдена.")
-        return
-
-    await state.set_state(RouteStates.waiting_for_point_audio)
-    await state.update_data(point_id=str(point.id))
-    await callback.message.answer(
-        "Отправьте новое аудио для точки.\n"
-        "Нажмите на кнопку 📎 и выберите 'Аудио'"
-    )
-
-@router.message(RouteStates.waiting_for_point_text)
-async def handle_point_text_edit(message: Message, state: FSMContext):
-    """Сохранение нового текста точки"""
-    if not await check_admin(message.from_user.id):
-        return
-
-    data = await state.get_data()
-    point_id = data.get('point_id')
-    if not point_id:
-        await message.answer("Ошибка: точка не найдена.")
-        await state.clear()
-        return
-
-    try:
-        point = await Point.objects.aget(id=point_id)
-    except Point.DoesNotExist:
-        await message.answer("Точка не найдена.")
-        await state.clear()
-        return
-
-    point.text_content = message.text
-    await point.asave()
-
-    await message.answer("Текст точки успешно обновлен.")
-    await state.clear()
-    
-    # Создаем новый callback query с правильными параметрами
-    new_callback = CallbackQuery(
-        id=str(message.message_id),
-        from_user=message.from_user,
-        chat_instance=str(message.chat.id),
-        message=message,
-        data=f"view_pt:{str(point.id)[:8]}"
-    )
-    await handle_view_point(new_callback)
 
 @router.message(RouteStates.waiting_for_point_photo, F.photo)
 async def handle_point_photo_edit(message: Message, state: FSMContext, bot):
@@ -785,7 +733,7 @@ async def handle_point_photo_edit(message: Message, state: FSMContext, bot):
 
     # Сохраняем фото
     from django.core.files.base import ContentFile
-    point.photo.save(f"point_{point.id}_photo.jpg", ContentFile(photo_bytes), save=False)
+    point.photo.save(f"{point.name}.jpg", ContentFile(photo_bytes), save=False)
     await point.asave()
 
     await message.answer("Фото точки успешно обновлено.")
@@ -829,7 +777,7 @@ async def handle_point_audio_edit(message: Message, state: FSMContext, bot):
 
     # Сохраняем аудио
     from django.core.files.base import ContentFile
-    point.audio_file.save(f"point_{point.id}_audio.mp3", ContentFile(audio_bytes), save=False)
+    point.audio_file.save(f"{point.name}.mp3", ContentFile(audio_bytes), save=False)
     await point.asave()
 
     await message.answer("Аудио точки успешно обновлено.")
@@ -844,6 +792,84 @@ async def handle_point_audio_edit(message: Message, state: FSMContext, bot):
         data=f"view_pt:{str(point.id)[:8]}"
     )
     await handle_view_point(new_callback)
+
+@router.message(RouteStates.waiting_for_point_text)
+async def handle_point_text_edit(message: Message, state: FSMContext):
+    """Сохранение нового текста точки"""
+    if not await check_admin(message.from_user.id):
+        return
+
+    data = await state.get_data()
+    point_id = data.get('point_id')
+    if not point_id:
+        await message.answer("Ошибка: точка не найдена.")
+        await state.clear()
+        return
+
+    try:
+        point = await Point.objects.aget(id=point_id)
+    except Point.DoesNotExist:
+        await message.answer("Точка не найдена.")
+        await state.clear()
+        return
+
+    point.text_content = message.text
+    await point.asave()
+
+    await message.answer("Текст точки успешно обновлен.")
+    await state.clear()
+    
+    # Создаем новый callback query с правильными параметрами
+    new_callback = CallbackQuery(
+        id=str(message.message_id),
+        from_user=message.from_user,
+        chat_instance=str(message.chat.id),
+        message=message,
+        data=f"view_pt:{str(point.id)[:8]}"
+    )
+    await handle_view_point(new_callback)
+
+@router.message(RouteStates.waiting_for_point_video, F.video)
+async def handle_point_video_edit(message: Message, state: FSMContext):
+    """Сохранение нового видео точки"""
+    if not await check_admin(message.from_user.id):
+        return
+
+    data = await state.get_data()
+    point_id = data.get('point_id')
+    
+    try:
+        point = await Point.objects.aget(id=point_id)
+    except Point.DoesNotExist:
+        await message.answer("Точка не найдена.")
+        await state.clear()
+        return
+
+    # Получаем файл видео
+    video = message.video
+    file = await message.bot.get_file(video.file_id)
+    file_path = file.file_path
+    
+    # Скачиваем видео
+    video_bytes = await message.bot.download_file(file_path)
+    
+    # Сохраняем видео
+    from django.core.files.base import ContentFile
+    point.video_file.save(f"{point.name}.mp4", ContentFile(video_bytes.read()), save=False)
+    await point.asave()
+    
+    await message.answer("Видео успешно обновлено!")
+    await state.clear()
+    
+    # Показываем обновленную информацию о точке
+    short_point_id = str(point.id)[:8]
+    await handle_view_point(CallbackQuery(
+        id=str(message.message_id),
+        from_user=message.from_user,
+        chat_instance=str(message.chat.id),
+        message=message,
+        data=f"view_pt:{short_point_id}"
+    ))
 
 @router.callback_query(F.data == "edit_point_name")
 async def handle_edit_point_name(callback: CallbackQuery, state: FSMContext):
@@ -1045,13 +1071,7 @@ async def handle_view_point(callback: CallbackQuery):
         from aiogram.types.input_file import FSInputFile
         await callback.message.answer_photo(
             photo=FSInputFile(point.photo.path),
-            caption=f"📍 Точка: {point.name}\n"
-                   f"ID: {point.id}\n"
-                   f"Описание: {point.description}\n"
-                   f"Создана: {point.created_at.strftime('%d.%m.%Y %H:%M')}\n"
-                   f"Координаты: {point.latitude}, {point.longitude}\n"
-                   f"Текст: {point.text_content if point.text_content else 'Нет'}\n"
-                   f"Аудио: {'Есть' if point.audio_file else 'Нет'}"
+            caption=f"📍 {point.name}"
         )
     else:
         await callback.message.answer(
@@ -1061,23 +1081,40 @@ async def handle_view_point(callback: CallbackQuery):
             f"Создана: {point.created_at.strftime('%d.%m.%Y %H:%M')}\n"
             f"Координаты: {point.latitude}, {point.longitude}\n"
             f"Текст: {point.text_content if point.text_content else 'Нет'}\n"
-            f"Аудио: {'Есть' if point.audio_file else 'Нет'}"
+            f"Аудио: {'Есть' if point.audio_file else 'Нет'}\n"
+            f"Видео: {'Есть' if point.video_file else 'Нет'}"
         )
+
+    # Отправляем описание и текст отдельным сообщением
+    if point.description or point.text_content:
+        text = ""
+        if point.description:
+            text += f"📝 {point.description}\n\n"
+        if point.text_content:
+            text += f"📄 {point.text_content}"
+        await callback.message.answer(text)
 
     # Отправляем аудио, если оно есть
     if point.audio_file:
         from aiogram.types.input_file import FSInputFile
         await callback.message.answer_audio(
             audio=FSInputFile(point.audio_file.path),
-            caption="Аудио для точки"
+            caption=f"🎵 {point.name}"
         )
 
-    if point.video_file:
+    # Отправляем видео, если оно есть
+    if point.video_file and point.video_file.name:
         from aiogram.types.input_file import FSInputFile
-        await callback.message.answer_video(
-            video=FSInputFile(point.video_file.path),
-            caption="Видео для точки"
-        )
+        try:
+            await callback.message.answer_video(
+                video=FSInputFile(point.video_file.path),
+                caption=f"🎥 {point.name}",
+                width=None,
+                height=None
+            )
+        except Exception as e:
+            logging.error(f"Ошибка при отправке видео: {e}")
+            await callback.message.answer("Не удалось загрузить видео точки.")
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -1136,31 +1173,9 @@ async def handle_cancel_edit(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("Произошла ошибка при отмене редактирования.")
         await state.clear()
 
-@router.callback_query(F.data.startswith("del_rt:"))
-async def handle_delete_route(callback: CallbackQuery):
-    """Удаление маршрута"""
-    if not await check_admin(callback.from_user.id):
-        return
-
-    short_route_id = callback.data.split(":")[1]
-    try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
-    except Route.DoesNotExist:
-        await callback.message.answer("Маршрут не найден.")
-        return
-
-    await route.adelete()
-    await callback.message.answer("Маршрут успешно удален.")
-    await handle_list_routes_callback(callback)
-
-
-from aiogram.types.input_file import FSInputFile
-from aiogram.types import Video
-
-
 @router.callback_query(F.data.startswith("edit_pt_video:"))
 async def handle_edit_point_video(callback: CallbackQuery, state: FSMContext):
-    """Редактирование видео точки"""
+    """Начало редактирования видео точки"""
     if not await check_admin(callback.from_user.id):
         return
 
@@ -1171,27 +1186,22 @@ async def handle_edit_point_video(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("Точка не найдена.")
         return
 
-    await state.set_state(RouteStates.waiting_for_point_video)
+    await state.set_state(RouteStates.editing_point_video)
     await state.update_data(point_id=str(point.id))
+
     await callback.message.answer(
-        "Отправьте новое видео для точки.\n"
-        "Нажмите на кнопку 📎 и выберите 'Видео'"
+        "Отправьте новое видео для точки (или отправьте /cancel для отмены):"
     )
 
-
-@router.message(RouteStates.waiting_for_point_video, F.video)
-async def handle_point_video_edit(message: Message, state: FSMContext, bot):
+@router.message(RouteStates.editing_point_video, F.video)
+async def handle_point_video_edit(message: Message, state: FSMContext):
     """Сохранение нового видео точки"""
     if not await check_admin(message.from_user.id):
         return
 
     data = await state.get_data()
     point_id = data.get('point_id')
-    if not point_id:
-        await message.answer("Ошибка: точка не найдена.")
-        await state.clear()
-        return
-
+    
     try:
         point = await Point.objects.aget(id=point_id)
     except Point.DoesNotExist:
@@ -1199,26 +1209,28 @@ async def handle_point_video_edit(message: Message, state: FSMContext, bot):
         await state.clear()
         return
 
-    # Получаем видео
+    # Получаем файл видео
     video = message.video
-    video_file = await bot.get_file(video.file_id)
-    video_bytes_io = await bot.download_file(video_file.file_path)
-    video_bytes = video_bytes_io.getvalue()
-
+    file = await message.bot.get_file(video.file_id)
+    file_path = file.file_path
+    
+    # Скачиваем видео
+    video_bytes = await message.bot.download_file(file_path)
+    
     # Сохраняем видео
     from django.core.files.base import ContentFile
-    point.video_file.save(f"point_{point.id}_video.mp4", ContentFile(video_bytes), save=False)
+    point.video_file.save(f"{point.name}.mp4", ContentFile(video_bytes.read()), save=False)
     await point.asave()
-
-    await message.answer("Видео точки успешно обновлено.")
+    
+    await message.answer("Видео успешно обновлено!")
     await state.clear()
-
-    # Создаем новый callback query с правильными параметрами
-    new_callback = CallbackQuery(
+    
+    # Показываем обновленную информацию о точке
+    short_point_id = str(point.id)[:8]
+    await handle_view_point(CallbackQuery(
         id=str(message.message_id),
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)[:8]}"
-    )
-    await handle_view_point(new_callback)
+        data=f"view_pt:{short_point_id}"
+    ))

@@ -10,14 +10,9 @@ from asgiref.sync import sync_to_async
 from aiogram.types import WebAppInfo
 from django.conf import settings
 from aiogram.types.input_file import FSInputFile
-
-import asyncio
-
-# Импортируем административные команды
-from . import admin_commands
-from . import route_handlers
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+import asyncio
 
 class RouteState(StatesGroup):
     waiting_for_next_point = State()
@@ -36,9 +31,10 @@ dp = Dispatcher()
 bot = None
 
 # Регистрируем административные команды
+from . import admin_commands
+from . import route_handlers
 dp.message.register(admin_commands.handle_approve, Command("approve"))
 dp.message.register(admin_commands.handle_reject, Command("reject"))
-
 
 def get_main_keyboard():
     keyboard = ReplyKeyboardMarkup(
@@ -68,9 +64,7 @@ def get_admin_keyboard():
     )
     return keyboard
 
-
 WEBAPP_URL = "https://280e96efed85bc66d099b6f91fe347d6.serveo.net"
-
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -87,6 +81,20 @@ async def cmd_start(message: types.Message):
     if user.is_verified:
         reply_markup = get_admin_keyboard() if user.is_admin else get_main_keyboard()
         await message.answer("Добро пожаловать обратно! Чем могу помочь?", reply_markup=reply_markup)
+        # Отправляем инструкцию
+        await message.answer(
+            "Надевай наушники и наслаждайся прогулкой в современном формате от GameCheb 😌\n\n"
+            "Инструкция по маршруту:\n\n"
+            "1. Заходи в бота.\n"
+            "2. Жми \"получить маршрут\".\n"
+            "3. Выбирай \"Квест по Чебоксарам\".\n"
+            "4. Следуй по точкам маршрута.\n"
+            "5. Когда дойдешь до указанной локации — слушай аудио.\n"
+            "6. Насладился объектом или локацией? Жми кнопку \"Я прошёл точку\" и двигайся дальше!\n\n"
+            "Всего маршрут включает 11 локаций, а вся прогулка займет не больше 1 часа.\n\n"
+            "🎁 После прохождения маршрута тебя ждет крутая возможность и секретный приз — мы ждем тебя в конце пути!\n\n"
+            "В случае любых сложностей или ошибок, пишите @dstepanv. Мы все починим и сделаем ваш опыт использования лучше)"
+        )
         return
 
     contact_keyboard = ReplyKeyboardMarkup(
@@ -97,7 +105,6 @@ async def cmd_start(message: types.Message):
         "Добро пожаловать! Для начала работы, пожалуйста, поделитесь своим номером телефона.",
         reply_markup=contact_keyboard
     )
-
 
 @dp.message(lambda message: message.contact is not None)
 async def handle_contact(message: types.Message):
@@ -122,6 +129,20 @@ async def handle_contact(message: types.Message):
         reply_markup=reply_markup
     )
 
+    # Отправляем инструкцию
+    await message.answer(
+        "Надевай наушники и наслаждайся прогулкой в современном формате от GameCheb 😌\n\n"
+        "Инструкция по маршруту:\n\n"
+        "1. Заходи в бота.\n"
+        "2. Жми \"получить маршрут\".\n"
+        "3. Выбирай \"Квест по Чебоксарам\".\n"
+        "4. Следуй по точкам маршрута.\n"
+        "5. Когда дойдешь до указанной локации — слушай аудио.\n"
+        "6. Насладился объектом или локацией? Жми кнопку \"Я прошёл точку\" и двигайся дальше!\n\n"
+        "Всего маршрут включает 11 локаций, а вся прогулка займет не больше 1 часа.\n\n"
+        "🎁 После прохождения маршрута тебя ждет крутая возможность и секретный приз — мы ждем тебя в конце пути!\n\n"
+        "В случае любых сложностей или ошибок, пишите @dstepanv. Мы все починим и сделаем ваш опыт использования лучше)"
+    )
 
 @dp.message(F.text == "🎯 Получить маршрут")
 async def handle_get_routes(message: types.Message):
@@ -137,7 +158,6 @@ async def handle_get_routes(message: types.Message):
         keyboard.inline_keyboard.append([InlineKeyboardButton(text=route.name, callback_data=f"route_{route.id}")])
 
     await message.answer("Выберите маршрут:", reply_markup=keyboard)
-
 
 @dp.callback_query(lambda c: c.data.startswith("route_"))
 async def handle_route_selection(callback_query: types.CallbackQuery, state: FSMContext):
@@ -157,13 +177,19 @@ async def handle_route_selection(callback_query: types.CallbackQuery, state: FSM
     get_point = sync_to_async(lambda: Point.objects.get(id=first_point.point_id))
     point = await get_point()
 
+    # Отправляем локацию точки
+    await callback_query.message.answer_location(latitude=point.latitude, longitude=point.longitude)
+
     if point.photo:
         try:
-            await callback_query.message.answer_location(latitude=point.latitude, longitude=point.longitude)
             await callback_query.message.answer_photo(
                 photo=FSInputFile(point.photo.path),
-                caption=f"📍 Точка: {point.name}\nОписание: {point.description}\nТекст: {point.text_content if point.text_content else 'Нет'}"
+                caption=f"📍 {point.name}"
             )
+            # Отправляем описание и текст отдельным сообщением
+            description_text = f"{point.description}\n\n{point.text_content if point.text_content else ''}"
+            if description_text.strip():
+                await callback_query.message.answer(description_text)
         except Exception as e:
             logging.error(f"Ошибка при отправке фото: {e}")
 
@@ -171,16 +197,18 @@ async def handle_route_selection(callback_query: types.CallbackQuery, state: FSM
         try:
             await callback_query.message.answer_audio(
                 audio=FSInputFile(point.audio_file.path),
-                caption="Аудио для точки"
+                caption=f"🎵 {point.name}"
             )
         except Exception as e:
             logging.error(f"Ошибка при отправке аудио: {e}")
 
-    if point.video_file:
+    if point.video_file and point.video_file.name:
         try:
             await callback_query.message.answer_video(
                 video=FSInputFile(point.video_file.path),
-                caption="Видео для точки"
+                caption=f"🎥 {point.name}",
+                width=None,
+                height=None
             )
         except Exception as e:
             logging.error(f"Ошибка при отправке видео: {e}")
@@ -190,6 +218,32 @@ async def handle_route_selection(callback_query: types.CallbackQuery, state: FSM
         reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Я прошел точку")]], resize_keyboard=True)
     )
     await state.set_state(RouteState.waiting_for_next_point)
+
+async def send_completion_messages(message: types.Message):
+    """Отправка сообщений о завершении маршрута"""
+    try:
+        await message.answer("Маршрут завершен.", reply_markup=get_main_keyboard())
+        await message.answer(
+            "Ты это сделал!\n"
+            "Ты прошёл весь маршрут от GameCheb — и это не просто прогулка, это путь. Ты — из тех, кто не стоит на месте. И теперь у тебя есть шанс сделать следующий шаг.\n\n"
+            "Мы приглашаем тебя туда, где создаётся будущее.\n"
+            "Это — эксклюзивная экскурсия по самому современному образовательному кампусу в Чувашии. Здесь учатся, создают, запускают свои проекты и меняют мир. И ты можешь стать частью этого.\n\n"
+            "Чтобы попасть на экскурсию, просто оставь заявку в форме по ссылке ниже. Мест не так много, так что не откладывай.\n"
+            "Пройди ещё один шаг — к своим возможностям.\n\n"
+            "Регистрация на экскурсию:\n"
+            "https://forms.gle/Tkb3YpWUx3w1Dg427"
+        )
+        
+        # Ждем 10 секунд перед отправкой формы обратной связи
+        await asyncio.sleep(120)
+        
+        await message.answer(
+            "Оставь пожалуйста обратную связь о прохождении маршрута. Нам очень важно твое мнение, чтобы становится лучше каждый день)\n\n"
+            "Форма обратной связи:\n"
+            "https://forms.gle/RzJkY2u1ESKNZBW26"
+        )
+    except Exception as e:
+        logging.error(f"Ошибка при отправке сообщений о завершении маршрута: {e}")
 
 @dp.message(F.text == "Я прошел точку")
 async def handle_next_point(message: types.Message, state: FSMContext):
@@ -201,68 +255,68 @@ async def handle_next_point(message: types.Message, state: FSMContext):
     data = await state.get_data()
     route_points = data.get('route_points', [])
     current_index = data.get('current_index', 0)
-    print(current_index)
-
-    if current_index >= len(route_points):
-        await message.answer("Маршрут завершен.", reply_markup=get_main_keyboard())
-        await state.clear()
-        return
 
     route_point = route_points[current_index]
     get_point = sync_to_async(lambda: Point.objects.get(id=route_point.point_id))
     point = await get_point()
-    content = f"Точка: {point.name}\n\n{point.description}"
+
+    # Отправляем локацию точки
+    await message.answer_location(latitude=point.latitude, longitude=point.longitude)
+
+    # Отправляем фото, если оно есть
     if point.photo:
         try:
             await message.answer_photo(
                 photo=FSInputFile(point.photo.path),
-                caption=f"📍 Точка: {point.name}\n"
-                        f"Описание: {point.description}\n"
-                        f"Координаты: {point.latitude}, {point.longitude}\n"
-                        f"Текст: {point.text_content if point.text_content else 'Нет'}\n"
-                        f"Аудио: {'Есть' if point.audio_file else 'Нет'}"
+                caption=f"📍 {point.name}"
             )
+            # Отправляем описание и текст отдельным сообщением
+            description_text = f"{point.description}\n\n{point.text_content if point.text_content else ''}"
+            if description_text.strip():
+                await message.answer(description_text)
         except Exception as e:
             logging.error(f"Ошибка при отправке фото: {e}")
             await message.answer("Не удалось загрузить фото точки.")
-    if point.video_file:
+
+    # Отправляем видео, если оно есть
+    if point.video_file and point.video_file.name:
         try:
             await message.answer_video(
                 video=FSInputFile(point.video_file.path),
-                caption="Видео для точки"
+                caption=f"🎥 {point.name}",
+                width=None,
+                height=None
             )
         except Exception as e:
             logging.error(f"Ошибка при отправке видео: {e}")
             await message.answer("Не удалось загрузить видео точки.")
 
+    # Отправляем аудио, если оно есть
     if point.audio_file:
         try:
             await message.answer_audio(
                 audio=FSInputFile(point.audio_file.path),
-                caption="Аудио для точки"
+                caption=f"🎵 {point.name}"
             )
         except Exception as e:
             logging.error(f"Ошибка при отправке аудио: {e}")
             await message.answer("Не удалось загрузить аудио точки.")
 
-    current_index += 1
-    await state.update_data(current_index=current_index)
-
-    # Проверяем, достигли ли конца маршрута
-    if current_index >= len(route_points):
-        await message.answer("Маршрут завершен.", reply_markup=get_main_keyboard())
-        await state.clear()
-        return
     # Увеличиваем индекс для следующей точки
     current_index += 1
     await state.update_data(current_index=current_index)
-    data.get("current_index")
 
-    # Проверяем, достигли ли конца маршрута
-    if current_index + 1 >= len(route_points):
-        await message.answer("Маршрут завершен.", reply_markup=get_main_keyboard())
+    if current_index >= len(route_points):
+        # Запускаем отправку сообщений в отдельной задаче
+        asyncio.create_task(send_completion_messages(message))
         await state.clear()
         return
+
+    # Отправляем сообщение о следующей точке
+    await message.answer(
+        "Нажмите 'Я прошел точку' для продолжения.",
+        reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Я прошел точку")]], resize_keyboard=True)
+    )
 
 async def start_bot():
     """Функция запуска бота."""
