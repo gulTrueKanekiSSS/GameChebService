@@ -190,10 +190,6 @@ async def handle_route_selection(callback_query: types.CallbackQuery, state: FSM
         reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Я прошел точку")]], resize_keyboard=True)
     )
     await state.set_state(RouteState.waiting_for_next_point)
-    "Начинаем маршрут. Нажмите 'Я прошел точку' для продолжения.",
-    reply_markup = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Я прошел точку")]], resize_keyboard=True)
-
-    await state.set_state(RouteState.waiting_for_next_point)
 
 @dp.message(F.text == "Я прошел точку")
 async def handle_next_point(message: types.Message, state: FSMContext):
