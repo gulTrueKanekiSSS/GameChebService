@@ -24,8 +24,6 @@ load_dotenv(override=True)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Выводим значение токена для отладки
-print(f"Loading token from env: {os.getenv('TELEGRAM_BOT_TOKEN')}")
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
