@@ -318,6 +318,10 @@ async def handle_next_point(message: types.Message, state: FSMContext):
         reply_markup=ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text="Я прошел точку")]], resize_keyboard=True)
     )
 
+async def on_startup(dispatcher):
+    # Удаляем любой существующий webhook и сбрасываем очередь апдейтов
+    await bot.delete_webhook(drop_pending_updates=True)
+
 async def start_bot():
     """Функция запуска бота."""
     global bot
@@ -348,8 +352,7 @@ async def start_bot():
     for attempt in range(max_retries):
         try:
             logger.info(f"Запуск бота (попытка {attempt + 1}/{max_retries})")
-            await bot.delete_webhook(drop_pending_updates=True)
-            await dp.start_polling(bot, skip_updates=True)
+            await dp.start_polling(bot, skip_updates=True, on_startup=on_startup)
         except Exception as e:
             logger.error(f"Ошибка при запуске бота (попытка {attempt + 1}/{max_retries}): {e}")
             if attempt < max_retries - 1:
