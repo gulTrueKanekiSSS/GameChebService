@@ -348,6 +348,7 @@ async def start_bot():
     for attempt in range(max_retries):
         try:
             logger.info(f"Запуск бота (попытка {attempt + 1}/{max_retries})")
+            await bot.delete_webhook(drop_pending_updates=True)
             await dp.start_polling(bot, skip_updates=True)
         except Exception as e:
             logger.error(f"Ошибка при запуске бота (попытка {attempt + 1}/{max_retries}): {e}")
