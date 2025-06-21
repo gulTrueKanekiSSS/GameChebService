@@ -1,4 +1,4 @@
-import dj_database_url
+
 import os
 
 """
@@ -19,7 +19,10 @@ from dotenv import load_dotenv
 
 # Явно загружаем .env файл
 load_dotenv(override=True)
+import dj_database_url
 
+raw_admins = os.getenv("ADMIN_IDS", "")
+ADMIN_IDS = [int(x) for x in raw_admins.split(",") if x.strip()]
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -50,6 +53,7 @@ INSTALLED_APPS = [
     'core',
     'bot',
     'api',
+    'drf_yasg',
 ]
 
 MIDDLEWARE = [
@@ -153,6 +157,8 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10,
 }
 
-
+SWAGGER_SETTINGS = {
+    'USE_SESSION_AUTH': False,
+}
 #Временный для сайта
 TEMPLATES[0]['DIRS'] += [os.path.join(BASE_DIR, 'webapp_static')]

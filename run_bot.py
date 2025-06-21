@@ -1,101 +1,125 @@
 import asyncio
 import os
-import django
 import sys
-import logging
-from pathlib import Path
-from aiohttp import web
-import psutil
 import signal
+import logging
+import psutil
 
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+from pathlib import Path
+from aiohttp import web, hdrs
+from django.core.wsgi import get_wsgi_application
+from aiohttp_wsgi import WSGIHandler
+import drf_yasg
 
-# Указываем путь к settings.py
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+# 1) Настроим Django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'quest_bot.settings')
+import django  # noqa: E402
 django.setup()
 
-from bot.bot import start_bot
+# 2) Monkey-patch Request.host, чтобы strip’ить ":порт" в любых случаях
+def _strip_port_host(self):
+    raw = self._message.headers.get(hdrs.HOST, '')
+    return raw.split(':', 1)[0]
 
-def create_lock_file():
-    """Создает файл блокировки для предотвращения повторного запуска"""
-    lock_file = Path("bot.lock")
-    if lock_file.exists():
-        logger.error("Бот уже запущен. Выход...")
-        sys.exit(1)
-    lock_file.touch()
-    return lock_file
+web.Request.host = property(_strip_port_host)
 
-def remove_lock_file(lock_file):
-    """Удаляет файл блокировки при завершении работы"""
-    try:
-        lock_file.unlink()
-    except Exception as e:
-        logger.error(f"Ошибка при удалении файла блокировки: {e}")
+class FixedWSGIHandler(WSGIHandler):
+    def prepare_environ(self, request):
+        """
+        Убираем порт из HTTP_HOST для Django
+        """
+        environ = super().prepare_environ(request)
+        raw_host = request.headers.get(hdrs.HOST, '')
+        host = raw_host.split(':', 1)[0]
+        environ['HTTP_HOST'] = host
+        environ['SERVER_NAME'] = host
+        environ['SERVER_PORT'] = os.getenv('PORT', '8000')
+        return environ
+
+# Получаем WSGI-приложение Django и обёртку для aiohttp
+django_app = get_wsgi_application()
+wsgi_handler = FixedWSGIHandler(django_app)
+
+# Путь до static drf-yasg (для Swagger UI)
+DRF_YASG_STATIC = Path(drf_yasg.__file__).resolve().parent / 'static' / 'drf-yasg'
+
+# Путь до вашего index.html WebApp
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "webapp_static"
+INDEX_HTML = STATIC_DIR / "index.html"
+
+from bot.bot import start_bot  # noqa: E402
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 def terminate_existing_process():
-    """Завершает уже запущенные процессы run_bot.py."""
+    """Завершает уже запущенные копии run_bot.py."""
     current_pid = os.getpid()
     current_script = sys.argv[0]
-
     for proc in psutil.process_iter(['pid', 'cmdline']):
         try:
-            if proc.info['pid'] != current_pid and proc.info.get('cmdline') and current_script in proc.info['cmdline']:
-                logger.warning(f"Завершаем процесс {proc.info['pid']}.")
-                os.kill(proc.info['pid'], signal.SIGTERM)
+            pid = proc.info.get('pid')
+            cmdline = proc.info.get('cmdline') or []
+            if pid != current_pid and isinstance(cmdline, list) and current_script in cmdline:
+                logger.warning(f"Завершаем старый процесс {pid}")
+                os.kill(pid, signal.SIGTERM)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
 
 async def simple_web_server():
-    """Простой HTTP-сервер для Render."""
-    async def handle(request):
-        return web.Response(text="Bot is running")
-
     app = web.Application()
-    app.router.add_get("/", handle)
+
+    # 1) Health-check
+    async def handle_root(request):
+        return web.Response(text="Bot is running")
+    app.router.add_get('/', handle_root)
+
+    # 2) Mount Django WSGI under /docs
+    docs_app = web.Application()
+    # Serve static files for Swagger UI
+    docs_app.router.add_static(
+        '/static/drf-yasg/',
+        str(DRF_YASG_STATIC),
+        show_index=False
+    )
+    docs_app.router.add_route('*', '/{path_info:.*}', wsgi_handler)
+    app.add_subapp('/docs', docs_app)
+
+    # 3) Mount API router under /api
+    api_app = web.Application()
+    api_app.router.add_route('*', '/{path_info:.*}', wsgi_handler)
+    app.add_subapp('/api', api_app)
+
+    # 4) Catch-all for SPA
+    async def handle_webapp(request):
+        init_data = request.query.get('initData')
+        if not init_data:
+            return web.Response(text="❌ Не все параметры получены!", content_type='text/html')
+        return web.FileResponse(INDEX_HTML)
+    app.router.add_route('*', '/{tail:.*}', handle_webapp)
+
     return app
 
 async def main():
-    """Основная точка входа."""
-    is_production = os.getenv("RENDER") == "true"
+    terminate_existing_process()
+    # 1) Start bot in background
+    asyncio.create_task(start_bot())
 
-    if is_production:
-        terminate_existing_process()
-        try:
-            # Запуск бота как фоновая задача
-            asyncio.create_task(start_bot())
+    # 2) Start aiohttp server
+    port = int(os.getenv('PORT', 8000))
+    runner = web.AppRunner(await simple_web_server())
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    logger.info(f"aiohttp proxy запущен на 0.0.0.0:{port}")
 
-            # Запуск HTTP-сервера
-            port = int(os.getenv("PORT", 8000))
-            runner = web.AppRunner(await simple_web_server())
-            await runner.setup()
-            site = web.TCPSite(runner, "0.0.0.0", port)
-            await site.start()
-
-            logger.info(f"HTTP сервер запущен на порту {port}")
-
-            while True:
-                await asyncio.sleep(3600)
-
-        except Exception as e:
-            logger.error(f"Ошибка в main(): {e}")
-    else:
-        lock_file = create_lock_file()
-        try:
-            await start_bot()
-        except Exception as e:
-            logger.error(f"Критическая ошибка в работе бота: {e}")
-        finally:
-            remove_lock_file(lock_file)
-
-if __name__ == "__main__":
+    # 3) Keep alive
     try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Бот остановлен пользователем")
-    except Exception as e:
-        logger.error(f"Неожиданная ошибка: {e}")
+        while True:
+            await asyncio.sleep(3600)
+    except asyncio.CancelledError:
+        pass
+
+if __name__ == '__main__':
+    asyncio.run(main())
