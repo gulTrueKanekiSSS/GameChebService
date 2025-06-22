@@ -25,7 +25,9 @@ if not TELEGRAM_TOKEN:
     raise SystemExit(1)
 
 bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
-# Импорт диспетчера с зарегистрированными хендлерами
+# Импорт диспетчера и регистрация роутеров
+from bot.bot import dp, register_handlers  # register_handlers подключает admin и route routers
+register_handlers(dp)
 from bot.bot import dp
 
 # Monkey-patch Request.host, чтобы убрать ":порт"
