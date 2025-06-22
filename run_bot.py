@@ -3,10 +3,10 @@ import os
 import logging
 from pathlib import Path
 from aiohttp import web, hdrs
-from django.core.wsgi import get_wsgi_application
 from aiohttp_wsgi import WSGIHandler
+from django.core.wsgi import get_wsgi_application
 import drf_yasg
-from aiogram import Bot
+from aiogram import Bot, types
 from aiogram.client.default import DefaultBotProperties
 
 # Настройка логирования
@@ -45,12 +45,12 @@ class FixedWSGIHandler(WSGIHandler):
         environ['SERVER_PORT'] = os.getenv('PORT', '8000')
         return environ
 
+# Настройка Django WSGI-приложения
 django_app = get_wsgi_application()
 wsgi_handler = FixedWSGIHandler(django_app)
 
-# Статика DRF-YASG
+# Пути к статическим файлам
 DRF_YASG_STATIC = Path(drf_yasg.__file__).resolve().parent / 'static' / 'drf-yasg'
-# Статика SPA
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "webapp_static"
 INDEX_HTML = STATIC_DIR / "index.html"
@@ -63,7 +63,7 @@ async def simple_web_server():
         return web.Response(text="Bot is running")
     app.router.add_get('/', handle_root)
 
-    # Swagger UI
+    # Swagger UI (DRF YASG)
     docs_app = web.Application()
     docs_app.router.add_static(
         '/static/drf-yasg/', str(DRF_YASG_STATIC), show_index=False
@@ -71,21 +71,17 @@ async def simple_web_server():
     docs_app.router.add_route('*', '/{path_info:.*}', wsgi_handler)
     app.add_subapp('/docs', docs_app)
 
-    # API-приложение
+    # Django API подприложение
     api_app = web.Application()
     api_app.router.add_route('*', '/{path_info:.*}', wsgi_handler)
     app.add_subapp('/api', api_app)
 
-    # Телеграм webhook
-    from aiogram import types
-
+    # Telegram webhook endpoint
     async def handle_telegram_webhook(request):
         payload = await request.json()
-        # Преобразуем dict в Update
         update = types.Update(**payload)
-        await dp.process_update(update, bot=bot)
+        await dp.feed_update(bot, update)
         return web.Response(text="OK")
-
     app.router.add_post('/telegram/webhook/', handle_telegram_webhook)
 
     # Catch-all для SPA
@@ -102,13 +98,13 @@ async def main():
     # Установка webhook
     WEBHOOK_URL = os.getenv('WEBHOOK_URL')
     if not WEBHOOK_URL:
-        logger.error('WEBHOOK_URL не задан в окружении')
+        logger.error('WEBHOOK_URL не задана в окружении')
     else:
         await bot.delete_webhook(drop_pending_updates=True)
         await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
         logger.info(f'Webhook установлен на {WEBHOOK_URL}')
 
-    # Запуск HTTP-сервера
+    # Запуск aiohttp-сервера
     port = int(os.getenv('PORT', 8000))
     runner = web.AppRunner(await simple_web_server())
     await runner.setup()
