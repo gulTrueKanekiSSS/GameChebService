@@ -2,16 +2,12 @@ import asyncio
 import os
 import logging
 from pathlib import Path
-
-import logger
 from aiohttp import web, hdrs
 from django.core.wsgi import get_wsgi_application
 from aiohttp_wsgi import WSGIHandler
 import drf_yasg
-from bot.bot import bot, dp
 
 # Настройка логирования
-type(logger)  # ensure logger usage
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -20,11 +16,13 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'quest_bot.settings')
 import django  # noqa: E402
 django.setup()
 
-# 2) Monkey-patch Request.host, чтобы strip’ить ":порт"
+# Импортируем бот после инициализации Django
+from bot.bot import bot, dp
+
+# Monkey-patch Request.host чтобы strip’ить ":порт"
 def _strip_port_host(self):
     raw = self._message.headers.get(hdrs.HOST, '')
     return raw.split(':', 1)[0]
-
 web.Request.host = property(_strip_port_host)
 
 # WSGI обёртка для Django
@@ -88,13 +86,11 @@ async def simple_web_server():
         if not init_data:
             return web.Response(text="❌ Не все параметры получены!", content_type='text/html')
         return web.FileResponse(INDEX_HTML)
-
     app.router.add_route('*', '/{tail:.*}', handle_webapp)
-
     return app
 
 async def main():
-    # 1) Настраиваем webhook
+    # Настройка webhook
     webhook_url = os.getenv('WEBHOOK_URL')
     if not webhook_url:
         logger.error('WEBHOOK_URL не задан')
@@ -103,7 +99,7 @@ async def main():
         await bot.set_webhook(webhook_url, drop_pending_updates=True)
         logger.info(f'Webhook установлен на {webhook_url}')
 
-    # 2) Запускаем aiohttp сервер
+    # Запуск aiohttp сервера
     port = int(os.getenv('PORT', 8000))
     runner = web.AppRunner(await simple_web_server())
     await runner.setup()
@@ -111,7 +107,7 @@ async def main():
     await site.start()
     logger.info(f'aiohttp proxy запущен на 0.0.0.0:{port}')
 
-    # 3) Период жизни процесса
+    # Keep alive
     try:
         while True:
             await asyncio.sleep(3600)
