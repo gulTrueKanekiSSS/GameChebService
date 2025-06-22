@@ -25,10 +25,10 @@ if not TELEGRAM_TOKEN:
     raise SystemExit(1)
 
 bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
-# Импортируем диспетчер и регистрируем хендлеры
-from bot.bot import dp  # предполагается, что в bot.bot описаны и зарегистрированы все хендлеры
+# Импорт диспетчера с зарегистрированными хендлерами
+from bot.bot import dp
 
-# Monkey-patch Request.host, чтобы strip’ить ":порт"
+# Monkey-patch Request.host, чтобы убрать ":порт"
 def _strip_port_host(self):
     raw = self._message.headers.get(hdrs.HOST, '')
     return raw.split(':', 1)[0]
@@ -48,7 +48,7 @@ class FixedWSGIHandler(WSGIHandler):
 django_app = get_wsgi_application()
 wsgi_handler = FixedWSGIHandler(django_app)
 
-# DRF YASG статические файлы
+# Статика DRF-YASG
 DRF_YASG_STATIC = Path(drf_yasg.__file__).resolve().parent / 'static' / 'drf-yasg'
 # Статика SPA
 BASE_DIR = Path(__file__).resolve().parent
@@ -63,7 +63,7 @@ async def simple_web_server():
         return web.Response(text="Bot is running")
     app.router.add_get('/', handle_root)
 
-    # Swagger UI (DRF-YASG)
+    # Swagger UI
     docs_app = web.Application()
     docs_app.router.add_static(
         '/static/drf-yasg/', str(DRF_YASG_STATIC), show_index=False
@@ -71,19 +71,18 @@ async def simple_web_server():
     docs_app.router.add_route('*', '/{path_info:.*}', wsgi_handler)
     app.add_subapp('/docs', docs_app)
 
-    # API подприложение
+    # API-приложение
     api_app = web.Application()
     api_app.router.add_route('*', '/{path_info:.*}', wsgi_handler)
     app.add_subapp('/api', api_app)
 
-    # Telegram webhook endpoint
-    import json
+    # Телеграм webhook
     from aiogram import types
 
     async def handle_telegram_webhook(request):
-        data = await request.json()
-        update = types.Update.de_json(data)
-        # Передаём bot в процессинг
+        payload = await request.json()
+        # Преобразуем dict в Update
+        update = types.Update(**payload)
         await dp.process_update(update, bot=bot)
         return web.Response(text="OK")
 
@@ -100,16 +99,16 @@ async def simple_web_server():
     return app
 
 async def main():
-    # Настройка webhook
+    # Установка webhook
     WEBHOOK_URL = os.getenv('WEBHOOK_URL')
     if not WEBHOOK_URL:
-        logger.error('WEBHOOK_URL не задана в окружении')
+        logger.error('WEBHOOK_URL не задан в окружении')
     else:
         await bot.delete_webhook(drop_pending_updates=True)
         await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
         logger.info(f'Webhook установлен на {WEBHOOK_URL}')
 
-    # Запуск aiohttp сервера
+    # Запуск HTTP-сервера
     port = int(os.getenv('PORT', 8000))
     runner = web.AppRunner(await simple_web_server())
     await runner.setup()
