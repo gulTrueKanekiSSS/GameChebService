@@ -14,5 +14,6 @@ router.register(r'promocodes', PromoCodeViewSet)
 router.register(r'progress', UserQuestProgressViewSet)
 
 urlpatterns = [
-    path('', include(router.urls)),
+    # path('', include(router.urls)),
+    path('api/', include(router.urls)),
 ] 
