@@ -39,24 +39,18 @@ web.Request.host = property(_strip_port_host)
 # WSGI обёртка для Django
 class FixedWSGIHandler(WSGIHandler):
     def prepare_environ(self, request):
+ # Построим стандартный WSGI-environ
+
         environ = super().prepare_environ(request)
 
-        # Исправляем host/port
         raw_host = request.headers.get(hdrs.HOST, '')
         host = raw_host.split(':', 1)[0]
-        environ['HTTP_HOST']   = host
+        environ['HTTP_HOST'] = host
         environ['SERVER_NAME'] = host
         environ['SERVER_PORT'] = os.getenv('PORT', '8000')
 
-        # Смещаем SCRIPT_NAME/PATH_INFO для /api/...
-        full_path = request.path
-        api_prefix = '/api'
-        if full_path.startswith(api_prefix):
-            environ['SCRIPT_NAME'] = api_prefix
-            new_path = full_path[len(api_prefix):] or '/'
-            if not new_path.startswith('/'):
-                new_path = '/' + new_path
-            environ['PATH_INFO'] = new_path
+        environ['SCRIPT_NAME'] = ''
+
 
         return environ
 
