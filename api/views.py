@@ -13,13 +13,13 @@ from .serializers import (
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.AllowAny]
 
 
 class QuestViewSet(viewsets.ModelViewSet):
     queryset = Quest.objects.all()
     serializer_class = QuestSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.AllowAny]
 
     @action(detail=True, methods=['post'])
     def toggle_active(self, request, pk=None):
@@ -32,13 +32,13 @@ class QuestViewSet(viewsets.ModelViewSet):
 class PromoCodeViewSet(viewsets.ModelViewSet):
     queryset = PromoCode.objects.all()
     serializer_class = PromoCodeSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.AllowAny]
 
 
 class UserQuestProgressViewSet(viewsets.ModelViewSet):
     queryset = UserQuestProgress.objects.all()
     serializer_class = UserQuestProgressSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.AllowAny]
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
