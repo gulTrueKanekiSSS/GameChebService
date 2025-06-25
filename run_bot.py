@@ -74,10 +74,7 @@ async def simple_web_server():
     app.add_subapp('/docs', docs_app)
 
     # Django API подприложение
-    api_app = web.Application()
-    api_app.router.add_route('*', '/{path_info:.*}', wsgi_handler)
-    app.add_subapp('/api', api_app)
-
+    app.router.add_route('*', '/api/{path_info:.*}', wsgi_handler)
     # Telegram webhook endpoint
     async def handle_telegram_webhook(request):
         payload = await request.json()
