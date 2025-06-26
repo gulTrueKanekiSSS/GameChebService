@@ -4,7 +4,8 @@ from .views import (
     UserViewSet,
     QuestViewSet,
     PromoCodeViewSet,
-    UserQuestProgressViewSet
+    UserQuestProgressViewSet,
+    RouteViewSet
 )
 
 router = DefaultRouter()
@@ -12,6 +13,7 @@ router.register(r'users', UserViewSet)
 router.register(r'quests', QuestViewSet)
 router.register(r'promocodes', PromoCodeViewSet)
 router.register(r'progress', UserQuestProgressViewSet)
+router.register(r'routes', RouteViewSet, basename='route')
 
 urlpatterns = [
     path('', include(router.urls)),

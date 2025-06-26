@@ -1,12 +1,15 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from core.models import User, Quest, PromoCode, UserQuestProgress
+from rest_framework.viewsets import ReadOnlyModelViewSet
+
+from core.models import User, Quest, PromoCode, UserQuestProgress, Route
 from .serializers import (
     UserSerializer,
     QuestSerializer,
     PromoCodeSerializer,
-    UserQuestProgressSerializer
+    UserQuestProgressSerializer, RouteSerializer
 )
 
 
@@ -86,4 +89,12 @@ class UserQuestProgressViewSet(viewsets.ModelViewSet):
         progress.admin_comment = request.data.get('comment', '')
         progress.save()
 
-        return Response({'status': 'success'}) 
+        return Response({'status': 'success'})
+
+class RouteViewSet(ReadOnlyModelViewSet):
+    """
+    Отдаёт только активные маршруты вместе с их точками.
+    """
+    queryset = Route.objects.filter(is_active=True).order_by('created_at')
+    serializer_class = RouteSerializer
+    permission_classes = [AllowAny]
