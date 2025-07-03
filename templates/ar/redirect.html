@@ -12,10 +12,12 @@
             const urlParams = new URLSearchParams(window.location.search);
             let name = urlParams.get("name");
 
-            // Если параметра ?name= нет — берём имя из URL-пути
-            if (!name) {
+            // 🛡️ Защита от зацикливания, если пользователь открыл /redirect.html напрямую
+            if (!name || name === 'redirect.html') {
                 name = window.location.pathname.replace(/^\\//, '');
             }
+
+            console.log('🔎 Имя из URL:', name);
 
             const hours = new Date().getHours();
 
@@ -41,7 +43,7 @@
                 button.href = '#';
                 button.textContent = 'Неизвестная ссылка';
             }
-        }
+        };
     </script>
 </head>
 <body>
