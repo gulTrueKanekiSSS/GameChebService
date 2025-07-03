@@ -34,7 +34,12 @@ urlpatterns = [
          schema_view.with_ui('redoc', cache_timeout=0),
          name='schema-redoc'),
     path("webapp/", TemplateView.as_view(template_name="index.html")),
-    path("", TemplateView.as_view(template_name="webapp/index.html")),
+    # path("", TemplateView.as_view(template_name="webapp/index.html")),
+
+    path('', TemplateView.as_view(template_name='ar/index.html')),
+    path('monuments/', TemplateView.as_view(template_name='ar/monuments.html')),
+    path('redirect.html', TemplateView.as_view(template_name='ar/redirect.html')),
+    re_path(r'^(?P<name>nikolaev|gagarin|turing)/?$', TemplateView.as_view(template_name='ar/redirect.html')),
 ]
 
 
