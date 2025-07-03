@@ -124,7 +124,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "https://gamecheb.netlify.app",
+    "http://gamecheb.netlify.app",
 ]
 
 REST_FRAMEWORK = {
