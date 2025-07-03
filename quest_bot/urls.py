@@ -19,7 +19,7 @@ schema_view = get_schema_view(
 urlpatterns = [
     path('admin/', admin.site.urls),
     # — ваши существующие API-маршруты —
-    path('', include('api.urls')),  # пример
+    path('api/', include('api.urls')),  # пример
 
     # Swagger JSON/YAML
     re_path(r'^swagger(?P<format>\.json|\.yaml)$',
