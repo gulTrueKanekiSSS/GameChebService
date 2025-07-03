@@ -35,7 +35,6 @@ urlpatterns = [
          name='schema-redoc'),
     path("webapp/", TemplateView.as_view(template_name="index.html")),
     path("", TemplateView.as_view(template_name="webapp/index.html")),
-
 ]
 
 

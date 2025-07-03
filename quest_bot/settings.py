@@ -161,6 +161,4 @@ SWAGGER_SETTINGS = {
     'USE_SESSION_AUTH': False,
 }
 #Временный для сайта
-# TEMPLATES[0]['DIRS'] += [os.path.join(BASE_DIR, 'webapp_static')]
-TEMPLATES[0]['DIRS'] = [BASE_DIR / "templates"]
-STATICFILES_DIRS = [BASE_DIR / "static"]
+TEMPLATES[0]['DIRS'] += [os.path.join(BASE_DIR, 'webapp_static')]
