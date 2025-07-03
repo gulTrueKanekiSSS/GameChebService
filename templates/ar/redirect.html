@@ -1,0 +1,54 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Динамические ссылки</title>
+    <link id="themeStylesheet" rel="stylesheet" href="{% static 'ar/redirect.css' %}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        window.onload = function () {
+            const button = document.getElementById('dynamicButton');
+            const urlParams = new URLSearchParams(window.location.search);
+            let name = urlParams.get("name");
+
+            // Если параметра ?name= нет — берём имя из URL-пути
+            if (!name) {
+                name = window.location.pathname.replace(/^\\//, '');
+            }
+
+            const hours = new Date().getHours();
+
+            const linkMapDay = new Map([
+                ['nikolaev', 'https://xr.mix-ar.ru/q?id=2776'],
+                ['gagarin', 'http://example.com/gagarin'],
+                ['turing', 'http://example.com/turing']
+            ]);
+
+            const linkMapNight = new Map([
+                ['nikolaev', 'https://xr.mix-ar.ru/q?id=2912'],
+                ['gagarin', 'http://example.com/gagarin'],
+                ['turing', 'http://example.com/turing']
+            ]);
+
+            if ((hours >= 6 && hours < 20) && linkMapDay.has(name)) {
+                button.href = linkMapDay.get(name);
+                button.textContent = `Оживить памятник`;
+            } else if ((hours < 6 || hours >= 20) && linkMapNight.has(name)) {
+                button.href = linkMapNight.get(name);
+                button.textContent = `Оживить памятник`;
+            } else {
+                button.href = '#';
+                button.textContent = 'Неизвестная ссылка';
+            }
+        }
+    </script>
+</head>
+<body>
+    <p class="ios-warning">
+        🔥 Если у вас iPhone, открывайте этот сайт через <b>Safari</b> для корректной работы! 📱
+    </p>
+
+    <a id="dynamicButton" href="#" class="btn">Загрузить информацию</a>
+</body>
+</html>
