@@ -16,7 +16,11 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'your-secret-key-here')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '.serveo.net']
+ALLOWED_HOSTS = [
+  'localhost',
+  '127.0.0.1',
+  'gamechebservice-1.onrender.com',
+]
 
 def get_admin_ids():
     """Получает список ID администраторов из переменной окружения"""
