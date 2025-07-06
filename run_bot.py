@@ -65,8 +65,24 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "webapp_static"
 INDEX_HTML = STATIC_DIR / "index.html"
 
+
+@web.middleware
+async def cors_middleware(request, handler):
+    # preflight‐запрос
+    if request.method == 'OPTIONS':
+        resp = web.Response(status=200)
+    else:
+        resp = await handler(request)
+
+    # разрешаем фронту
+    resp.headers['Access-Control-Allow-Origin'] = 'https://gamechebminiapp.onrender.com'
+    resp.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+    resp.headers['Access-Control-Allow-Headers'] = '*'
+    resp.headers['Access-Control-Allow-Credentials'] = 'true'
+    return resp
+
 async def simple_web_server():
-    app = web.Application()
+    app = web.Application(middlewares=[cors_middleware])
 
     # Health-check
     async def handle_root(request):
