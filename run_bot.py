@@ -9,6 +9,8 @@ import drf_yasg
 from aiogram import Bot, types
 from aiogram.client.default import DefaultBotProperties
 
+import mimetypes
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -113,6 +115,8 @@ async def simple_web_server():
         if not init_data:
             return web.Response(text="❌ Не все параметры получены!", content_type='text/html')
         return web.FileResponse(INDEX_HTML)
+
+    app.router.add_static('/media/', str(BASE_DIR / 'media'), show_index=True)
     app.router.add_route('*', '/{tail:.*}', handle_webapp)
 
     return app
