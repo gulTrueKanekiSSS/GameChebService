@@ -12,3 +12,4 @@ psycopg2-binary==2.9.10
 Pillow==10.2.0
 logger
 django-cors-headers
+whitenoise
