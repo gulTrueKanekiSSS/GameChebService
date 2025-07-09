@@ -1,9 +1,12 @@
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, re_path, include
 from django.views.generic import TemplateView
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+
+from core import settings
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -37,6 +40,7 @@ urlpatterns = [
     path("", TemplateView.as_view(template_name="webapp/index.html")),
 ]
 
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 
 
