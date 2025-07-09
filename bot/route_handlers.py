@@ -93,6 +93,34 @@ async def handle_routes_menu(message: Message):
 @router.callback_query(F.data == "list_points")
 async def handle_list_points_callback(callback: CallbackQuery):
     """Показать список точек"""
+    # if not await check_admin(callback.from_user.id):
+    #     return
+    #
+    # points = await sync_to_async(list)(Point.objects.all().order_by('-created_at'))
+    # if not points:
+    #     await callback.message.answer("Список точек пуст.")
+    #     return
+    #
+    # text = "📋 Список точек:\n\n"
+    # for point in points:
+    #     text += f"• {point.name}\n"
+    #     text += f"  ID: {point.id}\n"
+    #     text += f"  Описание: {point.description}\n"
+    #     text += f"  Создана: {point.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+    #
+    # keyboard = []
+    # for point in points:
+    #     short_point_id = str(point.id)[:8]
+    #     keyboard.append([
+    #         InlineKeyboardButton(
+    #             text=f"✏️ {point.name}",
+    #             callback_data=f"view_pt:{short_point_id}"
+    #         )
+    #     ])
+    # keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_points_menu")])
+    #
+    # await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
     if not await check_admin(callback.from_user.id):
         return
 
@@ -100,14 +128,31 @@ async def handle_list_points_callback(callback: CallbackQuery):
     if not points:
         await callback.message.answer("Список точек пуст.")
         return
+    MAX_MSG_LEN = 4000
+    parts = []
 
-    text = "📋 Список точек:\n\n"
+    current = "📋 Список точек:\n\n"
     for point in points:
-        text += f"• {point.name}\n"
-        text += f"  ID: {point.id}\n"
-        text += f"  Описание: {point.description}\n"
-        text += f"  Создана: {point.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+        chunk = (
+            f"• {point.name}\n"
+            f"  ID: {point.id}\n"
+            f"  Описание: {point.description}\n"
+            f"  Создана: {point.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
+        )
+        if len(current) + len(chunk) > MAX_MSG_LEN:
+            parts.append(current)
+            current = chunk
+        else:
+            current += chunk
 
+    if current:
+        parts.append(current)
+
+    # Отправить текст частями
+    for part in parts:
+        await callback.message.answer(part)
+
+    # Отдельно отправить клавиатуру
     keyboard = []
     for point in points:
         short_point_id = str(point.id)[:8]
@@ -119,7 +164,8 @@ async def handle_list_points_callback(callback: CallbackQuery):
         ])
     keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_points_menu")])
 
-    await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+    await callback.message.answer("Выберите точку:", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
 
 @router.callback_query(F.data == "list_routes")
 async def handle_list_routes_callback(callback: CallbackQuery):
