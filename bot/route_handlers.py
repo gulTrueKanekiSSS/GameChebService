@@ -128,29 +128,6 @@ async def handle_list_points_callback(callback: CallbackQuery):
     if not points:
         await callback.message.answer("Список точек пуст.")
         return
-    MAX_MSG_LEN = 4000
-    parts = []
-
-    current = "📋 Список точек:\n\n"
-    for point in points:
-        chunk = (
-            f"• {point.name}\n"
-            f"  ID: {point.id}\n"
-            f"  Описание: {point.description}\n"
-            f"  Создана: {point.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-        )
-        if len(current) + len(chunk) > MAX_MSG_LEN:
-            parts.append(current)
-            current = chunk
-        else:
-            current += chunk
-
-    if current:
-        parts.append(current)
-
-    # Отправить текст частями
-    for part in parts:
-        await callback.message.answer(part)
 
     # Отдельно отправить клавиатуру
     keyboard = []
