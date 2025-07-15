@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'core',
     'corsheaders',
     'rest_framework',
+    'storages',
 ]
 
 MIDDLEWARE = [
@@ -144,3 +145,15 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 SECURE_HSTS_SECONDS = 60  # или больше, когда убедитесь, что всё работает
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
+
+DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+
+AWS_ACCESS_KEY_ID = 'YCAJElGXyRdgdaNqgncT3PJx_'
+AWS_SECRET_ACCESS_KEY = 'YCOvQv8wZ2YUKi7aGuqYA_IMcn1Slig_XSb57Iv6'
+
+AWS_STORAGE_BUCKET_NAME = 'gamecheb'
+
+AWS_S3_ENDPOINT_URL = 'https://storage.yandexcloud.net'
+AWS_S3_FILE_OVERWRITE = False
+AWS_DEFAULT_ACL = None
+AWS_S3_REGION_NAME = 'ru-central1'
