@@ -1,3 +1,4 @@
+import logger
 from aiogram.types.input_file import URLInputFile
 import uuid
 from aiogram import Router, F
@@ -1164,6 +1165,8 @@ async def handle_view_point(callback: CallbackQuery):
         return
 
     if point.photo:
+        logger.logger.info(point.photo.url)
+
         await callback.message.answer_photo(
             photo=URLInputFile(point.photo.url),
             caption=f"📍 {point.name}"
