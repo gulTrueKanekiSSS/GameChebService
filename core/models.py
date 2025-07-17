@@ -1,6 +1,9 @@
 import uuid
 from django.db import models
 
+from yandex_s3_storage import ClientDocsStorage
+
+
 def get_photo_path(self, filename):
     """Генерирует путь для фото"""
     ext = filename.split('.')[-1]
@@ -84,9 +87,9 @@ class Point(models.Model):
     longitude = models.FloatField()
     text_content = models.TextField(blank=True, null=True)
 
-    audio_file = models.FileField(upload_to=get_audio_path, blank=True, null=True)
-    photo = models.ImageField(upload_to=get_photo_path, blank=True, null=True)
-    video_file = models.FileField(upload_to=get_video_path, blank=True, null=True)
+    audio_file = models.FileField(upload_to=get_audio_path,storage=ClientDocsStorage() ,blank=True, null=True)
+    photo = models.ImageField(upload_to=get_photo_path, storage=ClientDocsStorage() ,blank=True, null=True)
+    video_file = models.FileField(upload_to=get_video_path, storage=ClientDocsStorage() , blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_points')
