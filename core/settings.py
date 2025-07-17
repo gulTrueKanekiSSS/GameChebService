@@ -37,6 +37,9 @@ def get_admin_ids():
 # Список ID администраторов Telegram
 ADMIN_IDS = get_admin_ids()
 
+# === API TOKEN ===
+API_TOKEN = os.getenv('API_TOKEN')
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -132,7 +135,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 #     "http://localhost:3000",
 #     "http://gamechebminiapp.onrender.com",
 # ]
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "https://gamechebminiapp.onrender.com",
+]
 
 
 REST_FRAMEWORK = {
