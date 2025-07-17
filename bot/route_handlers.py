@@ -606,6 +606,50 @@ async def handle_edit_route_description(callback: CallbackQuery, state: FSMConte
     )
     await callback.message.answer("Введите новое описание маршрута:", reply_markup=keyboard)
 
+# @router.callback_query(F.data.startswith("edit_pt:"))
+# async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
+#     """Начало редактирования точки"""
+#     if not await check_admin(callback.from_user.id):
+#         return
+#
+#     short_point_id = callback.data.split(":")[1]
+#     try:
+#         point = await Point.objects.aget(id__startswith=short_point_id)
+#     except Point.DoesNotExist:
+#         await callback.message.answer("Точка не найдена.")
+#         return
+#
+#     await state.set_state(RouteStates.editing_point)
+#     await state.update_data(point_id=str(point.id))
+#
+#     keyboard = InlineKeyboardMarkup(
+#         inline_keyboard=[
+#             [
+#                 InlineKeyboardButton(text="📝 Название", callback_data="edit_point_name"),
+#                 InlineKeyboardButton(text="📄 Описание", callback_data="edit_point_description")
+#             ],
+#             [
+#                 InlineKeyboardButton(text="📍 Локация", callback_data="edit_point_location"),
+#                 InlineKeyboardButton(text="📝 Текст", callback_data=f"edit_pt_text:{short_point_id}")
+#             ],
+#             [
+#                 InlineKeyboardButton(text="📸 Фото", callback_data=f"edit_pt_photo:{short_point_id}"),
+#                 InlineKeyboardButton(text="🎵 Аудио", callback_data=f"edit_pt_audio:{short_point_id}")
+#             ],
+#             [
+#                 InlineKeyboardButton(text="🎥 Видео", callback_data=f"edit_pt_video:{short_point_id}")
+#             ],
+#             [
+#                 InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_pt:{short_point_id}")
+#             ]
+#         ]
+#     )
+#
+#     await callback.message.answer(
+#         "Выберите, что хотите отредактировать:",
+#         reply_markup=keyboard
+#     )
+
 @router.callback_query(F.data.startswith("edit_pt:"))
 async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
     """Начало редактирования точки"""
@@ -613,14 +657,28 @@ async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
         return
 
     short_point_id = callback.data.split(":")[1]
+
     try:
-        point = await Point.objects.aget(id__startswith=short_point_id)
+        # Поиск UUID по startswith вручную (медленно, но работает)
+        all_points = await sync_to_async(list)(
+            Point.objects.filter(id__icontains=short_point_id)
+        )
+        if not all_points:
+            raise Point.DoesNotExist
+        elif len(all_points) > 1:
+            await callback.message.answer("Найдено несколько точек с таким ID. Уточните ID.")
+            return
+
+        point = all_points[0]
+
     except Point.DoesNotExist:
         await callback.message.answer("Точка не найдена.")
         return
 
     await state.set_state(RouteStates.editing_point)
     await state.update_data(point_id=str(point.id))
+
+    short_id = str(point.id)[:8]
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -630,17 +688,17 @@ async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
             ],
             [
                 InlineKeyboardButton(text="📍 Локация", callback_data="edit_point_location"),
-                InlineKeyboardButton(text="📝 Текст", callback_data=f"edit_pt_text:{short_point_id}")
+                InlineKeyboardButton(text="📝 Текст", callback_data=f"edit_pt_text:{short_id}")
             ],
             [
-                InlineKeyboardButton(text="📸 Фото", callback_data=f"edit_pt_photo:{short_point_id}"),
-                InlineKeyboardButton(text="🎵 Аудио", callback_data=f"edit_pt_audio:{short_point_id}")
+                InlineKeyboardButton(text="📸 Фото", callback_data=f"edit_pt_photo:{short_id}"),
+                InlineKeyboardButton(text="🎵 Аудио", callback_data=f"edit_pt_audio:{short_id}")
             ],
             [
-                InlineKeyboardButton(text="🎥 Видео", callback_data=f"edit_pt_video:{short_point_id}")
+                InlineKeyboardButton(text="🎥 Видео", callback_data=f"edit_pt_video:{short_id}")
             ],
             [
-                InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_pt:{short_point_id}")
+                InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_pt:{short_id}")
             ]
         ]
     )
