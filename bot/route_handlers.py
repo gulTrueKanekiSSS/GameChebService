@@ -1,3 +1,4 @@
+from aiogram.types.input_file import URLInputFile
 import uuid
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, Video, URLInputFile
