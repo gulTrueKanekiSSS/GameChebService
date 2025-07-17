@@ -1,3 +1,4 @@
+import uuid
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, Video, URLInputFile
 from aiogram.filters import Command
@@ -13,6 +14,7 @@ from bot.states import RouteStates
 
 router = Router()
 
+
 async def check_admin(user_id: int) -> bool:
     """Проверяет, является ли пользователь администратором"""
     try:
@@ -20,6 +22,7 @@ async def check_admin(user_id: int) -> bool:
         return user.is_admin
     except User.DoesNotExist:
         return False
+
 
 def get_admin_keyboard():
     """Клавиатура для админа"""
@@ -38,6 +41,7 @@ def get_admin_keyboard():
     )
     return keyboard
 
+
 def get_points_management_keyboard():
     """Клавиатура для управления точками"""
     keyboard = InlineKeyboardMarkup(
@@ -52,6 +56,7 @@ def get_points_management_keyboard():
         ]
     )
     return keyboard
+
 
 def get_routes_management_keyboard():
     """Клавиатура для управления маршрутами"""
@@ -68,6 +73,7 @@ def get_routes_management_keyboard():
     )
     return keyboard
 
+
 @router.message(F.text == "📍 Точки")
 async def handle_points_menu(message: Message):
     """Обработка нажатия на кнопку 'Точки'"""
@@ -79,6 +85,7 @@ async def handle_points_menu(message: Message):
         reply_markup=get_points_management_keyboard()
     )
 
+
 @router.message(F.text == "🗺 Маршруты")
 async def handle_routes_menu(message: Message):
     """Обработка нажатия на кнопку 'Маршруты'"""
@@ -89,6 +96,7 @@ async def handle_routes_menu(message: Message):
         "Управление маршрутами:",
         reply_markup=get_routes_management_keyboard()
     )
+
 
 @router.callback_query(F.data == "list_points")
 async def handle_list_points_callback(callback: CallbackQuery):
@@ -110,7 +118,7 @@ async def handle_list_points_callback(callback: CallbackQuery):
     #
     # keyboard = []
     # for point in points:
-    #     short_point_id = str(point.id)[:8]
+    #     short_point_id = str(point.id)
     #     keyboard.append([
     #         InlineKeyboardButton(
     #             text=f"✏️ {point.name}",
@@ -132,7 +140,7 @@ async def handle_list_points_callback(callback: CallbackQuery):
     # Отдельно отправить клавиатуру
     keyboard = []
     for point in points:
-        short_point_id = str(point.id)[:8]
+        short_point_id = str(point.id)
         keyboard.append([
             InlineKeyboardButton(
                 text=f"✏️ {point.name}",
@@ -176,6 +184,7 @@ async def handle_list_routes_callback(callback: CallbackQuery):
 
     await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
 
+
 @router.callback_query(F.data == "back_to_points_menu")
 async def handle_back_to_points_menu(callback: CallbackQuery):
     """Возврат в меню точек"""
@@ -183,6 +192,7 @@ async def handle_back_to_points_menu(callback: CallbackQuery):
         "Управление точками:",
         reply_markup=get_points_management_keyboard()
     )
+
 
 @router.callback_query(F.data == "back_to_routes_menu")
 async def handle_back_to_routes_menu(callback: CallbackQuery):
@@ -192,6 +202,7 @@ async def handle_back_to_routes_menu(callback: CallbackQuery):
         reply_markup=get_routes_management_keyboard()
     )
 
+
 @router.callback_query(F.data == "back_to_main")
 async def handle_back_to_main(callback: CallbackQuery):
     """Возврат в главное меню"""
@@ -199,6 +210,7 @@ async def handle_back_to_main(callback: CallbackQuery):
         "Главное меню:",
         reply_markup=get_admin_keyboard()
     )
+
 
 @router.callback_query(F.data == "create_point")
 async def handle_create_point(callback: CallbackQuery, state: FSMContext):
@@ -209,6 +221,7 @@ async def handle_create_point(callback: CallbackQuery, state: FSMContext):
     await state.set_state(RouteStates.waiting_for_point_name)
     await callback.message.answer("Введите название точки:")
 
+
 @router.callback_query(F.data == "create_route")
 async def handle_create_route(callback: CallbackQuery, state: FSMContext):
     """Начало создания нового маршрута"""
@@ -218,12 +231,14 @@ async def handle_create_route(callback: CallbackQuery, state: FSMContext):
     await state.set_state(RouteStates.waiting_for_route_name)
     await callback.message.answer("Введите название маршрута:")
 
+
 @router.message(RouteStates.waiting_for_point_name)
 async def handle_point_name(message: Message, state: FSMContext):
     """Обработка названия точки"""
     await state.update_data(name=message.text)
     await state.set_state(RouteStates.waiting_for_point_description)
     await message.answer("Введите описание точки:")
+
 
 @router.message(RouteStates.waiting_for_point_description)
 async def handle_point_description(message: Message, state: FSMContext):
@@ -234,6 +249,7 @@ async def handle_point_description(message: Message, state: FSMContext):
         "Отправьте локацию точки.\n"
         "Нажмите на кнопку 📎 и выберите 'Локация'"
     )
+
 
 @router.message(RouteStates.waiting_for_point_location, F.location)
 async def handle_point_location(message: Message, state: FSMContext):
@@ -261,12 +277,12 @@ async def handle_point_location(message: Message, state: FSMContext):
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="📝 Добавить текст", callback_data=f"edit_pt_text:{str(point.id)[:8]}"),
-                    InlineKeyboardButton(text="📸 Добавить фото", callback_data=f"edit_pt_photo:{str(point.id)[:8]}")
+                    InlineKeyboardButton(text="📝 Добавить текст", callback_data=f"edit_pt_text:{str(point.id)}"),
+                    InlineKeyboardButton(text="📸 Добавить фото", callback_data=f"edit_pt_photo:{str(point.id)}")
                 ],
                 [
-                    InlineKeyboardButton(text="🎵 Добавить аудио", callback_data=f"edit_pt_audio:{str(point.id)[:8]}"),
-                    InlineKeyboardButton(text="🎥 Добавить видео", callback_data=f"edit_pt_video:{str(point.id)[:8]}")
+                    InlineKeyboardButton(text="🎵 Добавить аудио", callback_data=f"edit_pt_audio:{str(point.id)}"),
+                    InlineKeyboardButton(text="🎥 Добавить видео", callback_data=f"edit_pt_video:{str(point.id)}")
                 ],
                 [
                     InlineKeyboardButton(text="✅ Готово", callback_data="list_points")
@@ -274,6 +290,7 @@ async def handle_point_location(message: Message, state: FSMContext):
             ]
         )
     )
+
 
 @router.message(RouteStates.waiting_for_route_name)
 async def handle_route_name(message: Message, state: FSMContext):
@@ -301,6 +318,7 @@ async def handle_route_name(message: Message, state: FSMContext):
         await state.update_data(route_name=message.text)
         await state.set_state(RouteStates.waiting_for_route_description)
         await message.answer("Введите описание маршрута:")
+
 
 @router.message(RouteStates.waiting_for_route_description)
 async def handle_route_description(message: Message, state: FSMContext):
@@ -332,15 +350,15 @@ async def handle_route_description(message: Message, state: FSMContext):
             return
 
         description = message.text
-        
+
         user = await sync_to_async(User.objects.get)(telegram_id=message.from_user.id)
-        
+
         route = await sync_to_async(Route.objects.create)(
             name=name,
             description=description,
             created_by=user
         )
-        
+
         await state.clear()
         await message.answer(
             f"✅ Маршрут '{route.name}' создан!\n\n"
@@ -355,6 +373,7 @@ async def handle_route_description(message: Message, state: FSMContext):
             )
         )
 
+
 @router.callback_query(F.data.startswith("add_pt:"))
 async def handle_add_point_to_route(callback: CallbackQuery, state: FSMContext):
     """Добавление точки в маршрут"""
@@ -363,12 +382,13 @@ async def handle_add_point_to_route(callback: CallbackQuery, state: FSMContext):
 
     short_route_id = callback.data.split(":")[1]
     try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
+        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
     except Route.DoesNotExist:
         await callback.message.answer("Маршрут не найден.")
         return
 
-    existing_points = await sync_to_async(list)(RoutePoint.objects.filter(route=route).values_list('point_id', flat=True))
+    existing_points = await sync_to_async(list)(
+        RoutePoint.objects.filter(route=route).values_list('point_id', flat=True))
     available_points = await sync_to_async(list)(Point.objects.exclude(id__in=existing_points))
 
     if not available_points:
@@ -377,7 +397,7 @@ async def handle_add_point_to_route(callback: CallbackQuery, state: FSMContext):
 
     keyboard = []
     for point in available_points:
-        short_point_id = str(point.id)[:8]
+        short_point_id = str(point.id)
         keyboard.append([
             InlineKeyboardButton(
                 text=point.name,
@@ -391,6 +411,7 @@ async def handle_add_point_to_route(callback: CallbackQuery, state: FSMContext):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
     )
 
+
 @router.callback_query(F.data.startswith("sel_pt:"))
 async def handle_select_point_for_route(callback: CallbackQuery):
     """Обработка выбора точки для добавления в маршрут"""
@@ -398,15 +419,16 @@ async def handle_select_point_for_route(callback: CallbackQuery):
         return
 
     _, short_route_id, short_point_id = callback.data.split(":")
-    
+
     try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
-        point = await Point.objects.aget(id__startswith=short_point_id)
+        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
+        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
     except (Route.DoesNotExist, Point.DoesNotExist):
         await callback.message.answer("Маршрут или точка не найдены.")
         return
 
-    max_order = await sync_to_async(lambda: RoutePoint.objects.filter(route=route).order_by('-order').values_list('order', flat=True).first())()
+    max_order = await sync_to_async(
+        lambda: RoutePoint.objects.filter(route=route).order_by('-order').values_list('order', flat=True).first())()
     new_order = (max_order or 0) + 1
 
     await sync_to_async(RoutePoint.objects.create)(
@@ -418,6 +440,7 @@ async def handle_select_point_for_route(callback: CallbackQuery):
     await callback.message.answer(f"Точка '{point.name}' добавлена в маршрут '{route.name}'.")
     await handle_view_route(callback)
 
+
 @router.callback_query(F.data.startswith("view_route:"))
 async def handle_view_route(callback: CallbackQuery):
     """Просмотр конкретного маршрута"""
@@ -426,7 +449,7 @@ async def handle_view_route(callback: CallbackQuery):
 
     short_route_id = callback.data.split(":")[1]
     try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
+        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
     except Route.DoesNotExist:
         await callback.message.answer("Маршрут не найден.")
         return
@@ -436,7 +459,8 @@ async def handle_view_route(callback: CallbackQuery):
     text += f"Описание: {route.description}\n"
     text += f"Создан: {route.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
 
-    route_points = await sync_to_async(list)(RoutePoint.objects.filter(route=route).order_by('order').select_related('point'))
+    route_points = await sync_to_async(list)(
+        RoutePoint.objects.filter(route=route).order_by('order').select_related('point'))
     if route_points:
         text += "📍 Точки маршрута:\n"
         for i, route_point in enumerate(route_points, 1):
@@ -462,6 +486,7 @@ async def handle_view_route(callback: CallbackQuery):
 
     await callback.message.answer(text, reply_markup=keyboard)
 
+
 @router.callback_query(F.data.startswith("remove_point_from_route:"))
 async def handle_remove_point_from_route(callback: CallbackQuery):
     """Удаление точки из маршрута"""
@@ -470,12 +495,13 @@ async def handle_remove_point_from_route(callback: CallbackQuery):
 
     short_route_id = callback.data.split(":")[1]
     try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
+        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
     except Route.DoesNotExist:
         await callback.message.answer("Маршрут не найден.")
         return
 
-    route_points = await sync_to_async(list)(RoutePoint.objects.filter(route=route).select_related('point').order_by('order'))
+    route_points = await sync_to_async(list)(
+        RoutePoint.objects.filter(route=route).select_related('point').order_by('order'))
     if not route_points:
         await callback.message.answer("В маршруте нет точек.")
         return
@@ -496,6 +522,7 @@ async def handle_remove_point_from_route(callback: CallbackQuery):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
     )
 
+
 @router.callback_query(F.data.startswith("rm_pt:"))
 async def handle_remove_point_from_route_confirm(callback: CallbackQuery):
     """Подтверждение удаления точки из маршрута"""
@@ -504,8 +531,8 @@ async def handle_remove_point_from_route_confirm(callback: CallbackQuery):
 
     _, short_route_id, short_point_id = callback.data.split(":")
     try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
-        point = await Point.objects.aget(id__startswith=short_point_id)
+        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
+        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
         route_point = await sync_to_async(RoutePoint.objects.get)(route=route, point=point)
     except (Route.DoesNotExist, Point.DoesNotExist, RoutePoint.DoesNotExist):
         await callback.message.answer("Маршрут или точка не найдены.")
@@ -527,6 +554,7 @@ async def handle_remove_point_from_route_confirm(callback: CallbackQuery):
         )
     )
 
+
 @router.callback_query(F.data.startswith("edit_rt:"))
 async def handle_edit_route(callback: CallbackQuery, state: FSMContext):
     """Начало редактирования маршрута"""
@@ -535,7 +563,7 @@ async def handle_edit_route(callback: CallbackQuery, state: FSMContext):
 
     short_route_id = callback.data.split(":")[1]
     try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
+        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
     except Route.DoesNotExist:
         await callback.message.answer("Маршрут не найден.")
         return
@@ -560,6 +588,7 @@ async def handle_edit_route(callback: CallbackQuery, state: FSMContext):
         reply_markup=keyboard
     )
 
+
 @router.callback_query(F.data == "edit_route_name")
 async def handle_edit_route_name(callback: CallbackQuery, state: FSMContext):
     """Редактирование названия маршрута"""
@@ -582,6 +611,7 @@ async def handle_edit_route_name(callback: CallbackQuery, state: FSMContext):
         ]
     )
     await callback.message.answer("Введите новое название маршрута:", reply_markup=keyboard)
+
 
 @router.callback_query(F.data == "edit_route_description")
 async def handle_edit_route_description(callback: CallbackQuery, state: FSMContext):
@@ -606,6 +636,7 @@ async def handle_edit_route_description(callback: CallbackQuery, state: FSMConte
     )
     await callback.message.answer("Введите новое описание маршрута:", reply_markup=keyboard)
 
+
 # @router.callback_query(F.data.startswith("edit_pt:"))
 # async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
 #     """Начало редактирования точки"""
@@ -614,7 +645,7 @@ async def handle_edit_route_description(callback: CallbackQuery, state: FSMConte
 #
 #     short_point_id = callback.data.split(":")[1]
 #     try:
-#         point = await Point.objects.aget(id__startswith=short_point_id)
+#         point = await Point.objects.aget(id=uuid.UUID(short_point_id))
 #     except Point.DoesNotExist:
 #         await callback.message.answer("Точка не найдена.")
 #         return
@@ -678,7 +709,7 @@ async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
     await state.set_state(RouteStates.editing_point)
     await state.update_data(point_id=str(point.id))
 
-    short_id = str(point.id)[:8]
+    short_id = str(point.id)
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -708,6 +739,7 @@ async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
         reply_markup=keyboard
     )
 
+
 @router.callback_query(F.data.startswith("del_pt:"))
 async def handle_delete_point(callback: CallbackQuery):
     """Удаление точки"""
@@ -716,7 +748,7 @@ async def handle_delete_point(callback: CallbackQuery):
 
     short_point_id = callback.data.split(":")[1]
     try:
-        point = await Point.objects.aget(id__startswith=short_point_id)
+        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
     except Point.DoesNotExist:
         await callback.message.answer("Точка не найдена.")
         return
@@ -733,6 +765,7 @@ async def handle_delete_point(callback: CallbackQuery):
     await callback.message.answer("Точка успешно удалена.")
     await handle_list_points_callback(callback)
 
+
 @router.callback_query(F.data.startswith("edit_pt_text:"))
 async def handle_edit_point_text(callback: CallbackQuery, state: FSMContext):
     """Редактирование текста точки"""
@@ -741,7 +774,7 @@ async def handle_edit_point_text(callback: CallbackQuery, state: FSMContext):
 
     short_point_id = callback.data.split(":")[1]
     try:
-        point = await Point.objects.aget(id__startswith=short_point_id)
+        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
     except Point.DoesNotExist:
         await callback.message.answer("Точка не найдена.")
         return
@@ -749,6 +782,7 @@ async def handle_edit_point_text(callback: CallbackQuery, state: FSMContext):
     await state.set_state(RouteStates.waiting_for_point_text)
     await state.update_data(point_id=str(point.id))
     await callback.message.answer("Введите новый текст для точки:")
+
 
 @router.callback_query(F.data.startswith("edit_pt_photo:"))
 async def handle_edit_point_photo(callback: CallbackQuery, state: FSMContext):
@@ -758,7 +792,7 @@ async def handle_edit_point_photo(callback: CallbackQuery, state: FSMContext):
 
     short_point_id = callback.data.split(":")[1]
     try:
-        point = await Point.objects.aget(id__startswith=short_point_id)
+        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
     except Point.DoesNotExist:
         await callback.message.answer("Точка не найдена.")
         return
@@ -769,6 +803,7 @@ async def handle_edit_point_photo(callback: CallbackQuery, state: FSMContext):
         "Отправьте новое фото для точки.\n"
         "Нажмите на кнопку 📎 и выберите 'Фото'"
     )
+
 
 @router.message(RouteStates.waiting_for_point_photo, F.photo)
 async def handle_point_photo_edit(message: Message, state: FSMContext, bot):
@@ -801,15 +836,16 @@ async def handle_point_photo_edit(message: Message, state: FSMContext, bot):
 
     await message.answer("Фото точки успешно обновлено.")
     await state.clear()
-    
+
     new_callback = CallbackQuery(
         id=str(message.message_id),
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)[:8]}"
+        data=f"view_pt:{str(point.id)}"
     )
     await handle_view_point(new_callback)
+
 
 @router.message(RouteStates.waiting_for_point_audio, F.audio)
 async def handle_point_audio_edit(message: Message, state: FSMContext, bot):
@@ -842,15 +878,16 @@ async def handle_point_audio_edit(message: Message, state: FSMContext, bot):
 
     await message.answer("Аудио точки успешно обновлено.")
     await state.clear()
-    
+
     new_callback = CallbackQuery(
         id=str(message.message_id),
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)[:8]}"
+        data=f"view_pt:{str(point.id)}"
     )
     await handle_view_point(new_callback)
+
 
 @router.message(RouteStates.waiting_for_point_text)
 async def handle_point_text_edit(message: Message, state: FSMContext):
@@ -877,15 +914,16 @@ async def handle_point_text_edit(message: Message, state: FSMContext):
 
     await message.answer("Текст точки успешно обновлен.")
     await state.clear()
-    
+
     new_callback = CallbackQuery(
         id=str(message.message_id),
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)[:8]}"
+        data=f"view_pt:{str(point.id)}"
     )
     await handle_view_point(new_callback)
+
 
 @router.message(RouteStates.waiting_for_point_video, F.video)
 async def handle_point_video_edit(message: Message, state: FSMContext):
@@ -895,7 +933,7 @@ async def handle_point_video_edit(message: Message, state: FSMContext):
 
     data = await state.get_data()
     point_id = data.get('point_id')
-    
+
     try:
         point = await Point.objects.aget(id=point_id)
     except Point.DoesNotExist:
@@ -906,17 +944,17 @@ async def handle_point_video_edit(message: Message, state: FSMContext):
     video = message.video
     file = await message.bot.get_file(video.file_id)
     file_path = file.file_path
-    
+
     video_bytes = await message.bot.download_file(file_path)
-    
+
     from django.core.files.base import ContentFile
     point.video_file.save(f"{point.name}.mp4", ContentFile(video_bytes.read()), save=False)
     await point.asave()
-    
+
     await message.answer("Видео успешно обновлено!")
     await state.clear()
-    
-    short_point_id = str(point.id)[:8]
+
+    short_point_id = str(point.id)
     await handle_view_point(CallbackQuery(
         id=str(message.message_id),
         from_user=message.from_user,
@@ -924,6 +962,7 @@ async def handle_point_video_edit(message: Message, state: FSMContext):
         message=message,
         data=f"view_pt:{short_point_id}"
     ))
+
 
 @router.callback_query(F.data == "edit_point_name")
 async def handle_edit_point_name(callback: CallbackQuery, state: FSMContext):
@@ -948,6 +987,7 @@ async def handle_edit_point_name(callback: CallbackQuery, state: FSMContext):
     )
     await callback.message.answer("Введите новое название точки:", reply_markup=keyboard)
 
+
 @router.callback_query(F.data == "edit_point_description")
 async def handle_edit_point_description(callback: CallbackQuery, state: FSMContext):
     """Редактирование описания точки"""
@@ -970,6 +1010,7 @@ async def handle_edit_point_description(callback: CallbackQuery, state: FSMConte
         ]
     )
     await callback.message.answer("Введите новое описание точки:", reply_markup=keyboard)
+
 
 @router.callback_query(F.data == "edit_point_location")
 async def handle_edit_point_location(callback: CallbackQuery, state: FSMContext):
@@ -998,6 +1039,7 @@ async def handle_edit_point_location(callback: CallbackQuery, state: FSMContext)
         reply_markup=keyboard
     )
 
+
 @router.message(RouteStates.editing_point_name)
 async def handle_point_name_edit(message: Message, state: FSMContext):
     """Сохранение нового названия точки"""
@@ -1023,15 +1065,16 @@ async def handle_point_name_edit(message: Message, state: FSMContext):
 
     await message.answer("Название точки успешно обновлено.")
     await state.clear()
-    
+
     new_callback = CallbackQuery(
         id=str(message.message_id),
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)[:8]}"
+        data=f"view_pt:{str(point.id)}"
     )
     await handle_view_point(new_callback)
+
 
 @router.message(RouteStates.editing_point_description)
 async def handle_point_description_edit(message: Message, state: FSMContext):
@@ -1058,15 +1101,16 @@ async def handle_point_description_edit(message: Message, state: FSMContext):
 
     await message.answer("Описание точки успешно обновлено.")
     await state.clear()
-    
+
     new_callback = CallbackQuery(
         id=str(message.message_id),
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)[:8]}"
+        data=f"view_pt:{str(point.id)}"
     )
     await handle_view_point(new_callback)
+
 
 @router.message(RouteStates.editing_point_location, F.location)
 async def handle_point_location_edit(message: Message, state: FSMContext):
@@ -1094,15 +1138,16 @@ async def handle_point_location_edit(message: Message, state: FSMContext):
 
     await message.answer("Локация точки успешно обновлена.")
     await state.clear()
-    
+
     new_callback = CallbackQuery(
         id=str(message.message_id),
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)[:8]}"
+        data=f"view_pt:{str(point.id)}"
     )
     await handle_view_point(new_callback)
+
 
 @router.callback_query(F.data.startswith("view_pt:"))
 async def handle_view_point(callback: CallbackQuery):
@@ -1112,7 +1157,7 @@ async def handle_view_point(callback: CallbackQuery):
 
     short_point_id = callback.data.split(":")[1]
     try:
-        point = await Point.objects.aget(id__startswith=short_point_id)
+        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
     except Point.DoesNotExist:
         await callback.message.answer("Точка не найдена.")
         return
@@ -1177,6 +1222,7 @@ async def handle_view_point(callback: CallbackQuery):
         reply_markup=keyboard
     )
 
+
 @router.callback_query(F.data.startswith("del_rt:"))
 async def handle_delete_route(callback: CallbackQuery):
     """Удаление маршрута"""
@@ -1185,7 +1231,7 @@ async def handle_delete_route(callback: CallbackQuery):
 
     short_route_id = callback.data.split(":")[1]
     try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
+        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
     except Route.DoesNotExist:
         await callback.message.answer("Маршрут не найден.")
         return
@@ -1193,6 +1239,7 @@ async def handle_delete_route(callback: CallbackQuery):
     await route.adelete()
     await callback.message.answer("Маршрут успешно удален.")
     await handle_list_routes_callback(callback)
+
 
 @router.callback_query(F.data == "cancel_edit")
 async def handle_cancel_edit(callback: CallbackQuery, state: FSMContext):
@@ -1204,9 +1251,9 @@ async def handle_cancel_edit(callback: CallbackQuery, state: FSMContext):
         data = await state.get_data()
         point_id = data.get('point_id')
         route_id = data.get('route_id')
-        
+
         await state.clear()
-        
+
         if point_id:
             short_point_id = str(point_id)[:8]
             await handle_view_point(CallbackQuery(message=callback.message, data=f"view_pt:{short_point_id}"))
@@ -1217,6 +1264,7 @@ async def handle_cancel_edit(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("Произошла ошибка при отмене редактирования.")
         await state.clear()
 
+
 @router.callback_query(F.data.startswith("edit_pt_audio:"))
 async def handle_edit_point_audio(callback: CallbackQuery, state: FSMContext):
     """Начало редактирования аудио точки"""
@@ -1225,7 +1273,7 @@ async def handle_edit_point_audio(callback: CallbackQuery, state: FSMContext):
 
     short_point_id = callback.data.split(":")[1]
     try:
-        point = await Point.objects.aget(id__startswith=short_point_id)
+        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
     except Point.DoesNotExist:
         await callback.message.answer("Точка не найдена.")
         return
@@ -1236,6 +1284,7 @@ async def handle_edit_point_audio(callback: CallbackQuery, state: FSMContext):
         "Отправьте новое аудио для точки.\nНажмите на скрепку и выберите 'Аудио'."
     )
 
+
 @router.callback_query(F.data.startswith("edit_pt_video:"))
 async def handle_edit_point_video(callback: CallbackQuery, state: FSMContext):
     """Начало редактирования видео точки"""
@@ -1244,7 +1293,7 @@ async def handle_edit_point_video(callback: CallbackQuery, state: FSMContext):
 
     short_point_id = callback.data.split(":")[1]
     try:
-        point = await Point.objects.aget(id__startswith=short_point_id)
+        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
     except Point.DoesNotExist:
         await callback.message.answer("Точка не найдена.")
         return
