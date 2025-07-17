@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, Video
+from aiogram.types import Message, CallbackQuery, Video, URLInputFile
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
@@ -1062,7 +1062,7 @@ async def handle_view_point(callback: CallbackQuery):
     if point.photo:
         from aiogram.types.input_file import FSInputFile
         await callback.message.answer_photo(
-            photo=FSInputFile(point.photo.url),
+            photo=URLInputFile(point.photo.url),
             caption=f"📍 {point.name}"
         )
     else:
