@@ -1060,7 +1060,6 @@ async def handle_view_point(callback: CallbackQuery):
         return
 
     if point.photo:
-        from aiogram.types.input_file import FSInputFile
         await callback.message.answer_photo(
             photo=URLInputFile(point.photo.url),
             caption=f"📍 {point.name}"
@@ -1086,17 +1085,15 @@ async def handle_view_point(callback: CallbackQuery):
         await callback.message.answer(text)
 
     if point.audio_file:
-        from aiogram.types.input_file import FSInputFile
         await callback.message.answer_audio(
-            audio=FSInputFile(point.audio_file.path),
+            audio=URLInputFile(point.audio_file.url),
             caption=f"🎵 {point.name}"
         )
 
     if point.video_file and point.video_file.name:
-        from aiogram.types.input_file import FSInputFile
         try:
             await callback.message.answer_video(
-                video=FSInputFile(point.video_file.path),
+                video=URLInputFile(point.video_file.url),
                 caption=f"🎥 {point.name}",
                 width=None,
                 height=None
