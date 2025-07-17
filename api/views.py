@@ -1,9 +1,3 @@
-
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.apps import apps
-from django.db import connection
-import os
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
@@ -106,15 +100,3 @@ class RouteViewSet(ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
 
 
-@csrf_exempt
-def flush_db(request):
-    # Ограничим по секретному ключу (или по IP/логике авторизации)
-    if request.method != "POST" or request.headers.get("X-Admin-Secret") != os.getenv("FLUSH_SECRET"):
-        return JsonResponse({"error": "unauthorized"}, status=403)
-
-    with connection.cursor() as cursor:
-        for model in apps.get_models():
-            table = model._meta.db_table
-            cursor.execute(f'TRUNCATE TABLE "{table}" RESTART IDENTITY CASCADE;')
-
-    return JsonResponse({"status": "ok"})

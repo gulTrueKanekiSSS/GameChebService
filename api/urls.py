@@ -5,7 +5,7 @@ from .views import (
     QuestViewSet,
     PromoCodeViewSet,
     UserQuestProgressViewSet,
-    RouteViewSet, flush_db
+    RouteViewSet
 )
 
 router = DefaultRouter()
@@ -17,5 +17,4 @@ router.register(r'routes', RouteViewSet, basename='route')
 
 urlpatterns = [
     path('', include(router.urls)),
-    path("flush-db/", flush_db),
 ] 
