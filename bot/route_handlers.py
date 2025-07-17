@@ -1062,7 +1062,7 @@ async def handle_view_point(callback: CallbackQuery):
     if point.photo:
         from aiogram.types.input_file import FSInputFile
         await callback.message.answer_photo(
-            photo=FSInputFile(point.photo.path),
+            photo=FSInputFile(point.photo.url),
             caption=f"📍 {point.name}"
         )
     else:
