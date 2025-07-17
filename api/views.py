@@ -4,12 +4,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
-from core.models import User, Quest, PromoCode, UserQuestProgress, Route, Point
+from core.models import User, Quest, PromoCode, UserQuestProgress, Route
 from .serializers import (
     UserSerializer,
     QuestSerializer,
     PromoCodeSerializer,
-    UserQuestProgressSerializer, RouteSerializer, PointSerializer
+    UserQuestProgressSerializer, RouteSerializer
 )
 
 
@@ -99,7 +99,3 @@ class RouteViewSet(ReadOnlyModelViewSet):
     serializer_class = RouteSerializer
     permission_classes = [AllowAny]
 
-class PointViewSet(viewsets.ModelViewSet):
-    queryset = Point.objects.all()
-    serializer_class = PointSerializer
-    permission_classes = [AllowAny]
