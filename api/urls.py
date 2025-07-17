@@ -5,7 +5,7 @@ from .views import (
     QuestViewSet,
     PromoCodeViewSet,
     UserQuestProgressViewSet,
-    RouteViewSet
+    RouteViewSet, PointViewSet
 )
 
 router = DefaultRouter()
