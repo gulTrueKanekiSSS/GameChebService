@@ -142,7 +142,7 @@ async def handle_list_points_callback(callback: CallbackQuery):
     # Отдельно отправить клавиатуру
     keyboard = []
     for point in points:
-        short_point_id = str(point.id)
+        short_point_id = str(point.id)[:8]
         keyboard.append([
             InlineKeyboardButton(
                 text=f"✏️ {point.name}",
@@ -400,7 +400,7 @@ async def handle_add_point_to_route(callback: CallbackQuery, state: FSMContext):
 
     keyboard = []
     for point in available_points:
-        short_point_id = str(point.id)
+        short_point_id = str(point.id)[:8]
         keyboard.append([
             InlineKeyboardButton(
                 text=point.name,
@@ -957,7 +957,7 @@ async def handle_point_video_edit(message: Message, state: FSMContext):
     await message.answer("Видео успешно обновлено!")
     await state.clear()
 
-    short_point_id = str(point.id)
+    short_point_id = str(point.id)[:8]
     await handle_view_point(CallbackQuery(
         id=str(message.message_id),
         from_user=message.from_user,
