@@ -424,8 +424,8 @@ async def handle_select_point_for_route(callback: CallbackQuery):
     _, short_route_id, short_point_id = callback.data.split(":")
 
     try:
-        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
-        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
+        route = await Route.objects.aget(id__startswith=short_route_id)
+        point = await Point.objects.aget(id__startswith=short_point_id)
     except (Route.DoesNotExist, Point.DoesNotExist):
         await callback.message.answer("Маршрут или точка не найдены.")
         return
