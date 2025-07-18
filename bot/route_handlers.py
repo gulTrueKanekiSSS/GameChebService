@@ -383,8 +383,9 @@ async def handle_add_point_to_route(callback: CallbackQuery, state: FSMContext):
         return
 
     short_route_id = callback.data.split(":")[1]
+
     try:
-        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
+        route = await Route.objects.aget(id__startswith=short_route_id)
     except Route.DoesNotExist:
         await callback.message.answer("Маршрут не найден.")
         return
