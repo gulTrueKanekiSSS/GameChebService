@@ -11,18 +11,19 @@ from .serializers import (
     PromoCodeSerializer,
     UserQuestProgressSerializer, RouteSerializer
 )
+from .permissions import ReadOnlyOrTokenPermission
 
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [ReadOnlyOrTokenPermission]
 
 
 class QuestViewSet(viewsets.ModelViewSet):
     queryset = Quest.objects.all()
     serializer_class = QuestSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [ReadOnlyOrTokenPermission]
 
     @action(detail=True, methods=['post'])
     def toggle_active(self, request, pk=None):
@@ -35,13 +36,13 @@ class QuestViewSet(viewsets.ModelViewSet):
 class PromoCodeViewSet(viewsets.ModelViewSet):
     queryset = PromoCode.objects.all()
     serializer_class = PromoCodeSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [ReadOnlyOrTokenPermission]
 
 
 class UserQuestProgressViewSet(viewsets.ModelViewSet):
     queryset = UserQuestProgress.objects.all()
     serializer_class = UserQuestProgressSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [ReadOnlyOrTokenPermission]
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
