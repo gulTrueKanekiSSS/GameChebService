@@ -1,0 +1,17 @@
+aiogram==3.20.0.post0
+aiohttp==3.9.5
+aiohttp_wsgi==0.10.0
+asgiref==3.8.1
+dj_database_url==2.3.0
+Django==5.2
+djangorestframework==3.16.0
+drf_yasg==1.21.7
+psutil==5.9.8
+python-dotenv==1.1.0
+psycopg2-binary==2.9.10
+logger
+django-cors-headers
+whitenoise
+django-storages==1.14.6
+boto3==1.39.4
+botocore==1.39.4
