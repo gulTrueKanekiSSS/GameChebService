@@ -7,17 +7,26 @@ from yandex_s3_storage import ClientDocsStorage
 def get_photo_path(self, filename):
     """Генерирует путь для фото"""
     ext = filename.split('.')[-1]
-    return f'points/photos/{self.name}.{ext}'
+    name = getattr(self, 'name', None) or self.point.name
+    return f'points/photos/{name}.{ext}'
 
 def get_audio_path(self, filename):
     """Генерирует путь для аудио"""
     ext = filename.split('.')[-1]
-    return f'points/audio/{self.name}.{ext}'
+    name = getattr(self, 'name', None) or self.point.name
+    return f'points/audio/{name}.{ext}'
 
 def get_video_path(self, filename):
     """Генерирует путь для видео"""
     ext = filename.split('.')[-1]
-    return f'points/videos/{self.name}.{ext}'
+    name = getattr(self, 'name', None) or self.point.name
+    return f'points/videos/{name}.{ext}'
+
+def get_route_photo_path(self, filename):
+    """Генерирует путь для фото маршрута"""
+    ext = filename.split('.')[-1]
+    name = getattr(self, 'name', 'route')
+    return f'routes/photos/{name}.{ext}'
 
 class User(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -109,6 +118,7 @@ class Route(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     description = models.TextField()
+    photo = models.ImageField(upload_to=get_route_photo_path, storage=ClientDocsStorage(), blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_routes')
@@ -130,3 +140,19 @@ class RoutePoint(models.Model):
 
     def __str__(self):
         return f"{self.point.name} (Маршрут: {self.route.name}, порядок: {self.order})"
+
+
+class PointPhoto(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    point = models.ForeignKey(Point, on_delete=models.CASCADE, related_name='photos')
+    image = models.ImageField(upload_to=get_photo_path, storage=ClientDocsStorage())
+
+class PointAudio(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    point = models.ForeignKey(Point, on_delete=models.CASCADE, related_name='audios')
+    file = models.FileField(upload_to=get_audio_path, storage=ClientDocsStorage())
+
+class PointVideo(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    point = models.ForeignKey(Point, on_delete=models.CASCADE, related_name='videos')
+    file = models.FileField(upload_to=get_video_path, storage=ClientDocsStorage())

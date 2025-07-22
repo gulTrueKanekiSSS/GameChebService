@@ -29,4 +29,7 @@ class RouteStates(StatesGroup):
     editing_point_video = State()
 
     # Состояния для редактирования маршрута
-    editing_route = State() 
+    editing_route = State()
+    editing_route_name = State()
+    editing_route_description = State()
+    editing_route_photo = State() 

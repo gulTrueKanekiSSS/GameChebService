@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from core.models import User, Quest, PromoCode, UserQuestProgress, Point, RoutePoint, Route
+from core.models import User, Quest, PromoCode, UserQuestProgress, Point, RoutePoint, Route, PointPhoto, PointAudio, PointVideo
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -33,14 +33,33 @@ class UserQuestProgressSerializer(serializers.ModelSerializer):
         ]
 
 
+class PointPhotoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PointPhoto
+        fields = ['id', 'image']
+
+class PointAudioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PointAudio
+        fields = ['id', 'file']
+
+class PointVideoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PointVideo
+        fields = ['id', 'file']
+
 class PointSerializer(serializers.ModelSerializer):
+    photos = PointPhotoSerializer(many=True, read_only=True)
+    audios = PointAudioSerializer(many=True, read_only=True)
+    videos = PointVideoSerializer(many=True, read_only=True)
     class Meta:
         model = Point
         fields = (
             'id', 'name', 'description',
             'latitude', 'longitude',
             'text_content', 'photo',
-            'audio_file', 'video_file'
+            'audio_file', 'video_file',
+            'photos', 'audios', 'videos'
         )
 
 class RoutePointSerializer(serializers.ModelSerializer):
