@@ -1,5 +1,3 @@
-import logger
-from aiogram.types.input_file import URLInputFile
 import uuid
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, Video, URLInputFile
@@ -7,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from asgiref.sync import sync_to_async
-from core.models import User, Route, RoutePoint, Point
+from core.models import User, Route, RoutePoint, Point, PointPhoto, PointAudio, PointVideo
 from django.conf import settings
 from django.core.paginator import Paginator
 import logging
@@ -280,11 +278,11 @@ async def handle_point_location(message: Message, state: FSMContext):
             inline_keyboard=[
                 [
                     InlineKeyboardButton(text="📝 Добавить текст", callback_data=f"edit_pt_text:{str(point.id)}"),
-                    InlineKeyboardButton(text="📸 Добавить фото", callback_data=f"edit_pt_photo:{str(point.id)}")
+                    InlineKeyboardButton(text="📸 Добавить фото", callback_data=f"add_pt_photo:{str(point.id)}")
                 ],
                 [
-                    InlineKeyboardButton(text="🎵 Добавить аудио", callback_data=f"edit_pt_audio:{str(point.id)}"),
-                    InlineKeyboardButton(text="🎥 Добавить видео", callback_data=f"edit_pt_video:{str(point.id)}")
+                    InlineKeyboardButton(text="🎵 Добавить аудио", callback_data=f"add_pt_audio:{str(point.id)}"),
+                    InlineKeyboardButton(text="🎥 Добавить видео", callback_data=f"add_pt_video:{str(point.id)}")
                 ],
                 [
                     InlineKeyboardButton(text="✅ Готово", callback_data="list_points")
@@ -368,7 +366,10 @@ async def handle_route_description(message: Message, state: FSMContext):
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
-                        InlineKeyboardButton(text="➕ Добавить точку", callback_data=f"add_pt:{str(route.id)[:8]}"),
+                        InlineKeyboardButton(text="📸 Добавить фото", callback_data=f"add_route_photo:{str(route.id)}"),
+                        InlineKeyboardButton(text="➕ Добавить точку", callback_data=f"add_pt:{str(route.id)[:8]}")
+                    ],
+                    [
                         InlineKeyboardButton(text="✅ Готово", callback_data="list_routes")
                     ]
                 ]
@@ -456,6 +457,12 @@ async def handle_view_route(callback: CallbackQuery):
     except Route.DoesNotExist:
         await callback.message.answer("Маршрут не найден.")
         return
+
+    if route.photo:
+        await callback.message.answer_photo(
+            photo=URLInputFile(route.photo.url),
+            caption=f"🗺 {route.name}"
+        )
 
     text = f"🗺 Маршрут: {route.name}\n"
     text += f"ID: {route.id}\n"
@@ -579,6 +586,9 @@ async def handle_edit_route(callback: CallbackQuery, state: FSMContext):
             [
                 InlineKeyboardButton(text="📝 Название", callback_data="edit_route_name"),
                 InlineKeyboardButton(text="📄 Описание", callback_data="edit_route_description")
+            ],
+            [
+                InlineKeyboardButton(text="📸 Фото", callback_data="edit_route_photo")
             ],
             [
                 InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_route:{short_route_id}")
@@ -725,11 +735,16 @@ async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
                 InlineKeyboardButton(text="📝 Текст", callback_data=f"edit_pt_text:{short_id}")
             ],
             [
-                InlineKeyboardButton(text="📸 Фото", callback_data=f"edit_pt_photo:{short_id}"),
-                InlineKeyboardButton(text="🎵 Аудио", callback_data=f"edit_pt_audio:{short_id}")
+                InlineKeyboardButton(text="🔄 Изменить фото", callback_data=f"edit_pt_photo:{short_id}"),
+                InlineKeyboardButton(text="➕ Добавить фото", callback_data=f"add_pt_photo:{short_id}")
             ],
             [
-                InlineKeyboardButton(text="🎥 Видео", callback_data=f"edit_pt_video:{short_id}")
+                InlineKeyboardButton(text="🔄 Изменить аудио", callback_data=f"edit_pt_audio:{short_id}"),
+                InlineKeyboardButton(text="➕ Добавить аудио", callback_data=f"add_pt_audio:{short_id}")
+            ],
+            [
+                InlineKeyboardButton(text="🔄 Изменить видео", callback_data=f"edit_pt_video:{short_id}"),
+                InlineKeyboardButton(text="➕ Добавить видео", callback_data=f"add_pt_video:{short_id}")
             ],
             [
                 InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_pt:{short_id}")
@@ -795,49 +810,150 @@ async def handle_edit_point_photo(callback: CallbackQuery, state: FSMContext):
 
     short_point_id = callback.data.split(":")[1]
     try:
-        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
+        all_points = await sync_to_async(list)(
+            Point.objects.filter(id__icontains=short_point_id)
+        )
+        if not all_points:
+            raise Point.DoesNotExist
+        elif len(all_points) > 1:
+            await callback.message.answer("Найдено несколько точек с таким ID. Уточните ID.")
+            return
+
+        point = all_points[0]
     except Point.DoesNotExist:
         await callback.message.answer("Точка не найдена.")
         return
 
-    await state.set_state(RouteStates.waiting_for_point_photo)
-    await state.update_data(point_id=str(point.id))
-    await callback.message.answer(
-        "Отправьте новое фото для точки.\n"
-        "Нажмите на кнопку 📎 и выберите 'Фото'"
-    )
+    photos = await sync_to_async(list)(point.photos.all())
+    has_old_photo = bool(point.photo)
+    
+    total_photos = len(photos) + (1 if has_old_photo else 0)
+    
+    if total_photos == 0:
+        await callback.message.answer("У этой точки нет фото для редактирования.")
+        return
+    elif total_photos == 1:
+        if has_old_photo:
+            await state.set_state(RouteStates.waiting_for_point_photo)
+            await state.update_data(point_id=str(point.id), mode="edit", photo_type="old")
+        else:
+            await state.set_state(RouteStates.waiting_for_point_photo)
+            await state.update_data(point_id=str(point.id), mode="edit", photo_type="new", photo_id=str(photos[0].id))
+        
+        await callback.message.answer(
+            "Отправьте новое фото для замены существующего.\n"
+            "Нажмите на кнопку 📎 и выберите 'Фото'"
+        )
+    else:
+        keyboard = []
+        
+        if has_old_photo:
+            keyboard.append([
+                InlineKeyboardButton(
+                    text="📸 Основное фото (старое)",
+                    callback_data=f"edit_photo_old:{short_point_id}"
+                )
+            ])
+        
+        for i, photo in enumerate(photos, 1):
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"📸 Дополнительное фото {i}",
+                    callback_data=f"edit_photo_new:{short_point_id}:{str(photo.id)[:8]}"
+                )
+            ])
+        
+        keyboard.append([
+            InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_pt:{short_point_id}")
+        ])
+        
+        await callback.message.answer(
+            "Выберите, какое фото хотите заменить:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+        )
 
 
 @router.message(RouteStates.waiting_for_point_photo, F.photo)
 async def handle_point_photo_edit(message: Message, state: FSMContext, bot):
-    """Сохранение нового фото точки"""
+    """Сохранение/добавление фото точки"""
     if not await check_admin(message.from_user.id):
         return
 
     data = await state.get_data()
     point_id = data.get('point_id')
+    mode = data.get('mode', 'add')
+    photo_type = data.get('photo_type', 'old')
+    photo_id = data.get('photo_id')
+    
     if not point_id:
         await message.answer("Ошибка: точка не найдена.")
         await state.clear()
         return
 
     try:
-        point = await Point.objects.aget(id=point_id)
+        if len(point_id) <= 8:
+            all_points = await sync_to_async(list)(
+                Point.objects.filter(id__icontains=point_id)
+            )
+            if not all_points:
+                raise Point.DoesNotExist
+            point = all_points[0]
+        else:
+            point = await Point.objects.aget(id=point_id)
     except Point.DoesNotExist:
         await message.answer("Точка не найдена.")
         await state.clear()
         return
 
     photo = message.photo[-1]
-    photo_file = await bot.get_file(photo.file_id)
-    photo_bytes_io = await bot.download_file(photo_file.file_path)
-    photo_bytes = photo_bytes_io.getvalue()
+    try:
+        photo_file = await bot.get_file(photo.file_id)
+        photo_bytes_io = await bot.download_file(photo_file.file_path)
+        photo_bytes = photo_bytes_io.getvalue()
+    except Exception as e:
+        if "file is too big" in str(e):
+            await message.answer("❌ Файл слишком большой! Максимальный размер фото: 10 МБ")
+        else:
+            await message.answer(f"❌ Ошибка при загрузке файла: {e}")
+        await state.clear()
+        return
 
     from django.core.files.base import ContentFile
-    point.photo.save(f"{point.name}.jpg", ContentFile(photo_bytes), save=False)
-    await point.asave()
+    
+    if mode == "edit":
+        if photo_type == "old":
+            @sync_to_async
+            def update_photo():
+                point.photo.save(f"{point.name}.jpg", ContentFile(photo_bytes), save=True)
+                return point
+            
+            await update_photo()
+            await message.answer("Основное фото точки успешно обновлено.")
+        else:
+            @sync_to_async
+            def update_specific_photo():
+                try:
+                    photo_obj = PointPhoto.objects.get(id__icontains=photo_id, point=point)
+                    photo_obj.image.save(f"{point.name}_{photo.file_id}.jpg", ContentFile(photo_bytes), save=True)
+                    return photo_obj
+                except PointPhoto.DoesNotExist:
+                    return None
+            
+            result = await update_specific_photo()
+            if result:
+                await message.answer("Дополнительное фото точки успешно обновлено.")
+            else:
+                await message.answer("Ошибка: выбранное фото не найдено.")
+    else:
+        @sync_to_async
+        def create_photo():
+            photo_obj = PointPhoto(point=point)
+            photo_obj.image.save(f"{point.name}_{photo.file_id}.jpg", ContentFile(photo_bytes), save=True)
+            return photo_obj
+        
+        await create_photo()
+        await message.answer("Фото точки успешно добавлено.")
 
-    await message.answer("Фото точки успешно обновлено.")
     await state.clear()
 
     new_callback = CallbackQuery(
@@ -845,19 +961,19 @@ async def handle_point_photo_edit(message: Message, state: FSMContext, bot):
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)}"
+        data=f"view_pt:{str(point.id)[:8]}"
     )
     await handle_view_point(new_callback)
 
-
 @router.message(RouteStates.waiting_for_point_audio, F.audio)
 async def handle_point_audio_edit(message: Message, state: FSMContext, bot):
-    """Сохранение нового аудио точки"""
+    """Сохранение нового аудио точки (теперь можно несколько)"""
     if not await check_admin(message.from_user.id):
         return
 
     data = await state.get_data()
     point_id = data.get('point_id')
+    mode = data.get('mode', 'add')
     if not point_id:
         await message.answer("Ошибка: точка не найдена.")
         await state.clear()
@@ -871,15 +987,38 @@ async def handle_point_audio_edit(message: Message, state: FSMContext, bot):
         return
 
     audio = message.audio
-    audio_file = await bot.get_file(audio.file_id)
-    audio_bytes_io = await bot.download_file(audio_file.file_path)
-    audio_bytes = audio_bytes_io.getvalue()
+    try:
+        audio_file = await bot.get_file(audio.file_id)
+        audio_bytes_io = await bot.download_file(audio_file.file_path)
+        audio_bytes = audio_bytes_io.getvalue()
+    except Exception as e:
+        if "file is too big" in str(e):
+            await message.answer("❌ Файл слишком большой! Максимальный размер аудио: 50 МБ")
+        else:
+            await message.answer(f"❌ Ошибка при загрузке файла: {e}")
+        await state.clear()
+        return
 
     from django.core.files.base import ContentFile
-    point.audio_file.save(f"{point.name}.mp3", ContentFile(audio_bytes), save=False)
-    await point.asave()
+    
+    if mode == "edit":
+        @sync_to_async
+        def update_audio():
+            point.audio_file.save(f"{point.name}.mp3", ContentFile(audio_bytes), save=True)
+            return point
+        
+        await update_audio()
+        await message.answer("Аудио точки успешно обновлено.")
+    else:
+        @sync_to_async
+        def create_audio():
+            audio_obj = PointAudio(point=point)
+            audio_obj.file.save(f"{point.name}_{audio.file_id}.mp3", ContentFile(audio_bytes), save=True)
+            return audio_obj
+        
+        await create_audio()
+        await message.answer("Аудио точки успешно добавлено.")
 
-    await message.answer("Аудио точки успешно обновлено.")
     await state.clear()
 
     new_callback = CallbackQuery(
@@ -887,55 +1026,19 @@ async def handle_point_audio_edit(message: Message, state: FSMContext, bot):
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)}"
+        data=f"view_pt:{str(point.id)[:8]}"
     )
     await handle_view_point(new_callback)
-
-
-@router.message(RouteStates.waiting_for_point_text)
-async def handle_point_text_edit(message: Message, state: FSMContext):
-    """Сохранение нового текста точки"""
-    if not await check_admin(message.from_user.id):
-        return
-
-    data = await state.get_data()
-    point_id = data.get('point_id')
-    if not point_id:
-        await message.answer("Ошибка: точка не найдена.")
-        await state.clear()
-        return
-
-    try:
-        point = await Point.objects.aget(id=point_id)
-    except Point.DoesNotExist:
-        await message.answer("Точка не найдена.")
-        await state.clear()
-        return
-
-    point.text_content = message.text
-    await point.asave()
-
-    await message.answer("Текст точки успешно обновлен.")
-    await state.clear()
-
-    new_callback = CallbackQuery(
-        id=str(message.message_id),
-        from_user=message.from_user,
-        chat_instance=str(message.chat.id),
-        message=message,
-        data=f"view_pt:{str(point.id)}"
-    )
-    await handle_view_point(new_callback)
-
 
 @router.message(RouteStates.waiting_for_point_video, F.video)
 async def handle_point_video_edit(message: Message, state: FSMContext):
-    """Сохранение нового видео точки"""
+    """Сохранение нового видео точки (теперь можно несколько)"""
     if not await check_admin(message.from_user.id):
         return
 
     data = await state.get_data()
     point_id = data.get('point_id')
+    mode = data.get('mode', 'add')
 
     try:
         point = await Point.objects.aget(id=point_id)
@@ -945,16 +1048,38 @@ async def handle_point_video_edit(message: Message, state: FSMContext):
         return
 
     video = message.video
-    file = await message.bot.get_file(video.file_id)
-    file_path = file.file_path
-
-    video_bytes = await message.bot.download_file(file_path)
+    try:
+        file = await message.bot.get_file(video.file_id)
+        file_path = file.file_path
+        video_bytes = await message.bot.download_file(file_path)
+    except Exception as e:
+        if "file is too big" in str(e):
+            await message.answer("❌ Файл слишком большой! Максимальный размер видео: 50 МБ")
+        else:
+            await message.answer(f"❌ Ошибка при загрузке файла: {e}")
+        await state.clear()
+        return
 
     from django.core.files.base import ContentFile
-    point.video_file.save(f"{point.name}.mp4", ContentFile(video_bytes.read()), save=False)
-    await point.asave()
+    
+    if mode == "edit":
+        @sync_to_async
+        def update_video():
+            point.video_file.save(f"{point.name}.mp4", ContentFile(video_bytes.read()), save=True)
+            return point
+        
+        await update_video()
+        await message.answer("Видео успешно обновлено!")
+    else:
+        @sync_to_async
+        def create_video():
+            video_obj = PointVideo(point=point)
+            video_obj.file.save(f"{point.name}_{video.file_id}.mp4", ContentFile(video_bytes.read()), save=True)
+            return video_obj
+        
+        await create_video()
+        await message.answer("Видео успешно добавлено!")
 
-    await message.answer("Видео успешно обновлено!")
     await state.clear()
 
     short_point_id = str(point.id)[:8]
@@ -1074,7 +1199,7 @@ async def handle_point_name_edit(message: Message, state: FSMContext):
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)}"
+        data=f"view_pt:{str(point.id)[:8]}"
     )
     await handle_view_point(new_callback)
 
@@ -1110,7 +1235,7 @@ async def handle_point_description_edit(message: Message, state: FSMContext):
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)}"
+        data=f"view_pt:{str(point.id)[:8]}"
     )
     await handle_view_point(new_callback)
 
@@ -1147,32 +1272,69 @@ async def handle_point_location_edit(message: Message, state: FSMContext):
         from_user=message.from_user,
         chat_instance=str(message.chat.id),
         message=message,
-        data=f"view_pt:{str(point.id)}"
+        data=f"view_pt:{str(point.id)[:8]}"
     )
     await handle_view_point(new_callback)
 
 
 @router.callback_query(F.data.startswith("view_pt:"))
 async def handle_view_point(callback: CallbackQuery):
-    """Просмотр конкретной точки"""
+    """Просмотр конкретной точки (теперь все медиа)"""
     if not await check_admin(callback.from_user.id):
         return
 
     short_point_id = callback.data.split(":")[1]
     try:
-        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
+        all_points = await sync_to_async(list)(
+            Point.objects.filter(id__icontains=short_point_id)
+        )
+        if not all_points:
+            raise Point.DoesNotExist
+        elif len(all_points) > 1:
+            await callback.message.answer("Найдено несколько точек с таким ID. Уточните ID.")
+            return
+
+        point = all_points[0]
     except Point.DoesNotExist:
         await callback.message.answer("Точка не найдена.")
         return
 
+    photos = await sync_to_async(list)(point.photos.all())
+    print(f"DEBUG: Point {point.name} has {len(photos)} photos in PointPhoto table")
     if point.photo:
-        logger.logger.info(point.photo.url)
-
+        print(f"DEBUG: Point {point.name} also has old photo field: {point.photo.url}")
+    
+    if photos:
+        from aiogram.types import InputMediaPhoto
+        media_group = []
+        for i, photo in enumerate(photos):
+            print(f"DEBUG: Adding photo {i+1}: {photo.image.url}")
+            media_group.append(InputMediaPhoto(
+                media=URLInputFile(photo.image.url),
+                caption=f"📍 {point.name}" if i == 0 else None
+            ))
+        print(f"DEBUG: Sending media group with {len(media_group)} photos")
+        try:
+            await callback.message.answer_media_group(media_group)
+            print(f"DEBUG: Media group sent successfully")
+        except Exception as e:
+            print(f"DEBUG: Error sending media group: {e}")
+            for i, photo in enumerate(photos):
+                try:
+                    await callback.message.answer_photo(
+                        photo=URLInputFile(photo.image.url),
+                        caption=f"📍 {point.name} (фото {i+1}/{len(photos)})"
+                    )
+                except Exception as photo_error:
+                    print(f"DEBUG: Error sending individual photo {i+1}: {photo_error}")
+    elif point.photo:
+        print(f"DEBUG: Sending old photo field")
         await callback.message.answer_photo(
             photo=URLInputFile(point.photo.url),
             caption=f"📍 {point.name}"
         )
     else:
+        print(f"DEBUG: No photos found, sending text message")
         await callback.message.answer(
             f"📍 Точка: {point.name}\n"
             f"ID: {point.id}\n"
@@ -1192,13 +1354,31 @@ async def handle_view_point(callback: CallbackQuery):
             text += f"📄 {point.text_content}"
         await callback.message.answer(text)
 
-    if point.audio_file:
+    audios = await sync_to_async(list)(point.audios.all())
+    for audio in audios:
+        await callback.message.answer_audio(
+            audio=URLInputFile(audio.file.url),
+            caption=f"🎵 {point.name}"
+        )
+    if point.audio_file and not audios:
         await callback.message.answer_audio(
             audio=URLInputFile(point.audio_file.url),
             caption=f"🎵 {point.name}"
         )
 
-    if point.video_file and point.video_file.name:
+    videos = await sync_to_async(list)(point.videos.all())
+    for video in videos:
+        try:
+            await callback.message.answer_video(
+                video=URLInputFile(video.file.url),
+                caption=f"🎥 {point.name}",
+                width=None,
+                height=None
+            )
+        except Exception as e:
+            logging.error(f"Ошибка при отправке видео: {e}")
+            await callback.message.answer("Не удалось загрузить видео точки.")
+    if point.video_file and point.video_file.name and not videos:
         try:
             await callback.message.answer_video(
                 video=URLInputFile(point.video_file.url),
@@ -1284,9 +1464,9 @@ async def handle_edit_point_audio(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.set_state(RouteStates.waiting_for_point_audio)
-    await state.update_data(point_id=str(point.id))
+    await state.update_data(point_id=str(point.id), mode="edit")
     await callback.message.answer(
-        "Отправьте новое аудио для точки.\nНажмите на скрепку и выберите 'Аудио'."
+        "Отправьте новое аудио для замены существующего.\nНажмите на скрепку и выберите 'Аудио'."
     )
 
 
@@ -1304,7 +1484,286 @@ async def handle_edit_point_video(callback: CallbackQuery, state: FSMContext):
         return
 
     await state.set_state(RouteStates.waiting_for_point_video)
-    await state.update_data(point_id=str(point.id))
+    await state.update_data(point_id=str(point.id), mode="edit")
     await callback.message.answer(
-        "Отправьте новое видео для точки (или отправьте /cancel для отмены)."
+        "Отправьте новое видео для замены существующего (или отправьте /cancel для отмены)."
+    )
+
+@router.callback_query(F.data == "edit_route_photo")
+async def handle_edit_route_photo(callback: CallbackQuery, state: FSMContext):
+    """Редактирование фото маршрута"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    data = await state.get_data()
+    route_id = data.get('route_id')
+    if not route_id:
+        await callback.message.answer("Ошибка: маршрут не найден.")
+        await state.clear()
+        return
+
+    try:
+        route = await Route.objects.aget(id=route_id)
+    except Route.DoesNotExist:
+        await callback.message.answer("Маршрут не найден.")
+        await state.clear()
+        return
+
+    if route.photo:
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🔄 Заменить фото", callback_data="replace_route_photo"),
+                    InlineKeyboardButton(text="🗑 Удалить фото", callback_data="delete_route_photo")
+                ],
+                [
+                    InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_edit")
+                ]
+            ]
+        )
+        await callback.message.answer_photo(
+            photo=URLInputFile(route.photo.url),
+            caption="Текущее фото маршрута. Выберите действие:",
+            reply_markup=keyboard
+        )
+    else:
+        await state.set_state(RouteStates.editing_route_photo)
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_edit")
+                ]
+            ]
+        )
+        await callback.message.answer(
+            "Отправьте фото для маршрута.\nНажмите на кнопку 📎 и выберите 'Фото'",
+            reply_markup=keyboard
+        )
+
+@router.message(RouteStates.editing_route_photo, F.photo)
+async def handle_route_photo_save(message: Message, state: FSMContext, bot):
+    """Сохранение фото маршрута"""
+    if not await check_admin(message.from_user.id):
+        return
+
+    data = await state.get_data()
+    route_id = data.get('route_id')
+    if not route_id:
+        await message.answer("Ошибка: маршрут не найден.")
+        await state.clear()
+        return
+
+    try:
+        route = await Route.objects.aget(id=route_id)
+    except Route.DoesNotExist:
+        await message.answer("Маршрут не найден.")
+        await state.clear()
+        return
+
+    photo = message.photo[-1]
+    try:
+        photo_file = await bot.get_file(photo.file_id)
+        photo_bytes_io = await bot.download_file(photo_file.file_path)
+        photo_bytes = photo_bytes_io.getvalue()
+    except Exception as e:
+        if "file is too big" in str(e):
+            await message.answer("❌ Файл слишком большой! Максимальный размер фото: 10 МБ")
+        else:
+            await message.answer(f"❌ Ошибка при загрузке файла: {e}")
+        await state.clear()
+        return
+
+    from django.core.files.base import ContentFile
+    
+    @sync_to_async
+    def save_photo():
+        route.photo.save(f"{route.name}.jpg", ContentFile(photo_bytes), save=True)
+        return route
+    
+    await save_photo()
+    await message.answer("Фото маршрута успешно сохранено.")
+    await state.clear()
+
+    new_callback = CallbackQuery(
+        id=str(message.message_id),
+        from_user=message.from_user,
+        chat_instance=str(message.chat.id),
+        message=message,
+        data=f"view_route:{str(route.id)}"
+    )
+    await handle_view_route(new_callback)
+
+@router.callback_query(F.data == "replace_route_photo")
+async def handle_replace_route_photo(callback: CallbackQuery, state: FSMContext):
+    """Замена фото маршрута"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    await state.set_state(RouteStates.editing_route_photo)
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_edit")
+            ]
+        ]
+    )
+    await callback.message.answer(
+        "Отправьте новое фото для замены.\nНажмите на кнопку 📎 и выберите 'Фото'",
+        reply_markup=keyboard
+    )
+
+@router.callback_query(F.data == "delete_route_photo")
+async def handle_delete_route_photo(callback: CallbackQuery, state: FSMContext):
+    """Удаление фото маршрута"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    data = await state.get_data()
+    route_id = data.get('route_id')
+    if not route_id:
+        await callback.message.answer("Ошибка: маршрут не найден.")
+        await state.clear()
+        return
+
+    try:
+        route = await Route.objects.aget(id=route_id)
+        
+        @sync_to_async
+        def delete_photo():
+            if route.photo:
+                route.photo.delete()
+                route.save()
+                return True
+            return False
+        
+        result = await delete_photo()
+        
+        if result:
+            await callback.message.answer("Фото маршрута успешно удалено.")
+        else:
+            await callback.message.answer("У маршрута нет фото для удаления.")
+        
+        await state.clear()
+        
+        new_callback = CallbackQuery(
+            id=str(callback.id),
+            from_user=callback.from_user,
+            chat_instance=callback.chat_instance,
+            message=callback.message,
+            data=f"view_route:{str(route.id)}"
+        )
+        await handle_view_route(new_callback)
+        
+    except Route.DoesNotExist:
+        await callback.message.answer("Маршрут не найден.")
+        await state.clear()
+
+
+@router.callback_query(F.data.startswith("add_pt_photo:"))
+async def handle_add_point_photo(callback: CallbackQuery, state: FSMContext):
+    """Добавление нового фото к точке"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    point_id = callback.data.split(":")[1]
+    try:
+        point = await Point.objects.aget(id=point_id)
+    except Point.DoesNotExist:
+        await callback.message.answer("Точка не найдена.")
+        return
+
+    await state.set_state(RouteStates.waiting_for_point_photo)
+    await state.update_data(point_id=str(point.id), mode="add")
+    await callback.message.answer(
+        "Отправьте новое фото для добавления к точке.\n"
+        "Нажмите на кнопку 📎 и выберите 'Фото'"
+    )
+
+@router.callback_query(F.data.startswith("add_pt_audio:"))
+async def handle_add_point_audio(callback: CallbackQuery, state: FSMContext):
+    """Добавление нового аудио к точке"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    point_id = callback.data.split(":")[1]
+    try:
+        point = await Point.objects.aget(id=point_id)
+    except Point.DoesNotExist:
+        await callback.message.answer("Точка не найдена.")
+        return
+
+    await state.set_state(RouteStates.waiting_for_point_audio)
+    await state.update_data(point_id=str(point.id), mode="add")
+    await callback.message.answer(
+        "Отправьте новое аудио для добавления к точке.\nНажмите на скрепку и выберите 'Аудио'."
+    )
+
+@router.callback_query(F.data.startswith("add_pt_video:"))
+async def handle_add_point_video(callback: CallbackQuery, state: FSMContext):
+    """Добавление нового видео к точке"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    point_id = callback.data.split(":")[1]
+    try:
+        point = await Point.objects.aget(id=point_id)
+    except Point.DoesNotExist:
+        await callback.message.answer("Точка не найдена.")
+        return
+
+    await state.set_state(RouteStates.waiting_for_point_video)
+    await state.update_data(point_id=str(point.id), mode="add")
+    await callback.message.answer(
+        "Отправьте новое видео для добавления к точке (или отправьте /cancel для отмены)."
+    )
+
+@router.callback_query(F.data.startswith("edit_photo_old:"))
+async def handle_edit_old_photo(callback: CallbackQuery, state: FSMContext):
+    """Редактирование старого фото точки"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    short_point_id = callback.data.split(":")[1]
+    await state.set_state(RouteStates.waiting_for_point_photo)
+    await state.update_data(point_id=short_point_id, mode="edit", photo_type="old")
+    await callback.message.answer(
+        "Отправьте новое фото для замены основного фото.\n"
+        "Нажмите на кнопку 📎 и выберите 'Фото'"
+    )
+
+@router.callback_query(F.data.startswith("edit_photo_new:"))
+async def handle_edit_new_photo(callback: CallbackQuery, state: FSMContext):
+    """Редактирование нового фото точки"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    parts = callback.data.split(":")
+    short_point_id = parts[1]
+    photo_id = parts[2]
+    
+    await state.set_state(RouteStates.waiting_for_point_photo)
+    await state.update_data(point_id=short_point_id, mode="edit", photo_type="new", photo_id=photo_id)
+    await callback.message.answer(
+        "Отправьте новое фото для замены выбранного дополнительного фото.\n"
+        "Нажмите на кнопку 📎 и выберите 'Фото'"
+    )
+
+@router.callback_query(F.data.startswith("add_route_photo:"))
+async def handle_add_route_photo(callback: CallbackQuery, state: FSMContext):
+    """Добавление фото к новому маршруту"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    route_id = callback.data.split(":")[1]
+    try:
+        route = await Route.objects.aget(id=route_id)
+    except Route.DoesNotExist:
+        await callback.message.answer("Маршрут не найден.")
+        return
+
+    await state.set_state(RouteStates.editing_route_photo)
+    await state.update_data(route_id=str(route.id))
+    await callback.message.answer(
+        "Отправьте фото для маршрута.\n"
+        "Нажмите на кнопку 📎 и выберите 'Фото'"
     )

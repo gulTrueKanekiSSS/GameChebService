@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import User, Quest, PromoCode, UserQuestProgress
+from .models import User, Quest, PromoCode, UserQuestProgress, Point, PointPhoto, PointAudio, PointVideo
 
 
 @admin.register(User)
@@ -28,4 +28,23 @@ class UserQuestProgressAdmin(admin.ModelAdmin):
     list_display = ('user', 'quest', 'status', 'completed_at')
     list_filter = ('status', 'completed_at')
     search_fields = ('user__name', 'quest__name', 'admin_comment')
-    raw_id_fields = ('user', 'quest', 'promo_code') 
+    raw_id_fields = ('user', 'quest', 'promo_code')
+
+
+class PointPhotoInline(admin.TabularInline):
+    model = PointPhoto
+    extra = 1
+
+class PointAudioInline(admin.TabularInline):
+    model = PointAudio
+    extra = 1
+
+class PointVideoInline(admin.TabularInline):
+    model = PointVideo
+    extra = 1
+
+@admin.register(Point)
+class PointAdmin(admin.ModelAdmin):
+    inlines = [PointPhotoInline, PointAudioInline, PointVideoInline]
+    list_display = ('name', 'description', 'latitude', 'longitude', 'created_at')
+    search_fields = ('name', 'description') 
