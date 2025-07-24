@@ -765,6 +765,7 @@ async def handle_delete_point(callback: CallbackQuery):
         return
 
     short_point_id = callback.data.split(":")[1]
+    logging.info(short_point_id)
     try:
         point = await Point.objects.aget(id=uuid.UUID(short_point_id))
     except Point.DoesNotExist:
