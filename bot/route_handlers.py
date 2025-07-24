@@ -1300,6 +1300,8 @@ async def handle_view_point(callback: CallbackQuery):
         await callback.message.answer("Точка не найдена.")
         return
 
+    point_id = str(point.id)
+
     photos = await sync_to_async(list)(point.photos.all())
     print(f"DEBUG: Point {point.name} has {len(photos)} photos in PointPhoto table")
     if point.photo:
@@ -1394,8 +1396,8 @@ async def handle_view_point(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit_pt:{short_point_id}"),
-                InlineKeyboardButton(text="🗑 Удалить", callback_data=f"del_pt:{short_point_id}")
+                InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit_pt:{point_id}"),
+                InlineKeyboardButton(text="🗑 Удалить", callback_data=f"del_pt:{point_id}")
             ],
             [
                 InlineKeyboardButton(text="🔙 Назад к списку", callback_data="list_points")
