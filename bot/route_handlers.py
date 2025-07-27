@@ -1394,6 +1394,7 @@ async def handle_view_point(callback: CallbackQuery):
             await callback.message.answer("Не удалось загрузить видео точки.")
 
 
+
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
