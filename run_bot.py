@@ -28,9 +28,12 @@ if not TELEGRAM_TOKEN:
 
 bot = Bot(token=TELEGRAM_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 # Импорт диспетчера и регистрация роутеров
-from bot.bot import dp, register_handlers  # register_handlers подключает admin и route routers
-register_handlers(dp)
 from bot.bot import dp
+from bot import handlers
+
+# Регистрируем обработчики через новую структуру
+main_router = handlers.get_main_router()
+dp.include_router(main_router)
 
 # Monkey-patch Request.host, чтобы убрать ":порт"
 def _strip_port_host(self):

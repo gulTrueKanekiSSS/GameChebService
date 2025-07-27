@@ -30,11 +30,16 @@ token = os.getenv('TELEGRAM_BOT_TOKEN')
 dp = Dispatcher()
 bot = None
 
-# Регистрируем административные команды
+# Регистрируем основные обработчики
+from . import handlers
 from . import admin_commands
-from . import route_handlers
-dp.message.register(admin_commands.handle_approve, Command("approve"))
-dp.message.register(admin_commands.handle_reject, Command("reject"))
+
+# Регистрируем основные обработчики
+main_router = handlers.get_main_router()
+dp.include_router(main_router)
+
+# Регистрируем административные команды
+dp.include_router(admin_commands.router)
 
 def get_main_keyboard():
     keyboard = ReplyKeyboardMarkup(
@@ -341,10 +346,11 @@ async def start_bot():
     # Регистрируем хендлеры
     dp.message.register(cmd_start, Command("start"))
     dp.message.register(handle_contact, lambda message: message.contact is not None)
-    dp.message.register(route_handlers.handle_routes_menu, F.text == "🗺 Маршруты")
-    dp.message.register(route_handlers.handle_points_menu, F.text == "📍 Точки")
-
-    register_handlers(dp)
+    
+    # Регистрируем обработчики через новую структуру
+    from bot import handlers
+    main_router = handlers.get_main_router()
+    dp.include_router(main_router)
     
     max_retries = 3
     retry_delay = 5  # секунды
@@ -362,10 +368,5 @@ async def start_bot():
                 logger.error("Достигнуто максимальное количество попыток. Бот остановлен.")
                 raise
 
-from bot.admin_commands import router as admin_router
-from bot.route_handlers import router as route_router
-
-def register_handlers(dp: Dispatcher):
-    """Регистрация всех обработчиков"""
-    dp.include_router(admin_router)
-    dp.include_router(route_router) 
+# Старые импорты и функция register_handlers удалены
+# Теперь используется новая структура через handlers.py 
