@@ -149,8 +149,6 @@ async def simple_web_server():
 #         pass
 
 async def main():
-    dp = Dispatcher()
-    dp.include_router(router)
 
     logger.info("Бот запускается в режиме polling...")
     await dp.start_polling(bot)
