@@ -6,12 +6,10 @@ from aiohttp import web, hdrs
 from aiohttp_wsgi import WSGIHandler
 from django.core.wsgi import get_wsgi_application
 import drf_yasg
-from aiogram import Bot, types, Dispatcher
+from aiogram import Bot, types
 from aiogram.client.default import DefaultBotProperties
 
-import mimetypes
 
-from bot.route_handlers import router
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
