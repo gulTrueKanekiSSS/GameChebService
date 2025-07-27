@@ -147,6 +147,7 @@ async def simple_web_server():
 #         pass
 
 async def main():
+    await bot.delete_webhook(drop_pending_updates=True)
 
     logger.info("Бот запускается в режиме polling...")
     await dp.start_polling(bot)
