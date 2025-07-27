@@ -115,6 +115,7 @@ async def handle_contact(message: types.Message):
     save_user = sync_to_async(user.save)
     await save_user()
 
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="Открыть Web App", web_app=WebAppInfo(url=WEBAPP_URL))]
     ])
