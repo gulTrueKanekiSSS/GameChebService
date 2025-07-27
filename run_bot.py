@@ -6,10 +6,12 @@ from aiohttp import web, hdrs
 from aiohttp_wsgi import WSGIHandler
 from django.core.wsgi import get_wsgi_application
 import drf_yasg
-from aiogram import Bot, types
+from aiogram import Bot, types, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 
 import mimetypes
+
+from bot.route_handlers import router
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -121,30 +123,37 @@ async def simple_web_server():
 
     return app
 
+# async def main():
+#     # Установка webhook
+#     WEBHOOK_URL = os.getenv('WEBHOOK_URL')
+#     if not WEBHOOK_URL:
+#         logger.error('WEBHOOK_URL не задана в окружении')
+#     else:
+#         await bot.delete_webhook(drop_pending_updates=True)
+#         await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+#         logger.info(f'Webhook установлен на {WEBHOOK_URL}')
+#
+#     # Запуск aiohttp-сервера
+#     port = int(os.getenv('PORT', 8000))
+#     runner = web.AppRunner(await simple_web_server())
+#     await runner.setup()
+#     site = web.TCPSite(runner, '0.0.0.0', port)
+#     await site.start()
+#     logger.info(f'aiohttp proxy запущен на 0.0.0.0:{port}')
+#
+#     # Keep alive
+#     try:
+#         while True:
+#             await asyncio.sleep(3600)
+#     except asyncio.CancelledError:
+#         pass
+
 async def main():
-    # Установка webhook
-    WEBHOOK_URL = os.getenv('WEBHOOK_URL')
-    if not WEBHOOK_URL:
-        logger.error('WEBHOOK_URL не задана в окружении')
-    else:
-        await bot.delete_webhook(drop_pending_updates=True)
-        await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
-        logger.info(f'Webhook установлен на {WEBHOOK_URL}')
+    dp = Dispatcher()
+    dp.include_router(router)
 
-    # Запуск aiohttp-сервера
-    port = int(os.getenv('PORT', 8000))
-    runner = web.AppRunner(await simple_web_server())
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
-    logger.info(f'aiohttp proxy запущен на 0.0.0.0:{port}')
-
-    # Keep alive
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except asyncio.CancelledError:
-        pass
+    logger.info("Бот запускается в режиме polling...")
+    await dp.start_polling(bot)
 
 if __name__ == '__main__':
     asyncio.run(main())
