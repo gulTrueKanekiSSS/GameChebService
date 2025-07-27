@@ -64,7 +64,7 @@ def get_admin_keyboard():
     )
     return keyboard
 
-WEBAPP_URL = "https://280e96efed85bc66d099b6f91fe347d6.serveo.net"
+WEBAPP_URL = "https://gamecheb.ru"
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -115,10 +115,8 @@ async def handle_contact(message: types.Message):
     save_user = sync_to_async(user.save)
     await save_user()
 
-    params = f"?id={user.telegram_id}&name={user.name}&phone={user.phone_number}"
-
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Открыть Web App", web_app=WebAppInfo(url=WEBAPP_URL+params))]
+        [InlineKeyboardButton(text="Открыть Web App", web_app=WebAppInfo(url=WEBAPP_URL))]
     ])
 
     # Используем админскую клавиатуру, если пользователь админ
