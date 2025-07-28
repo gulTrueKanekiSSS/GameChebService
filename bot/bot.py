@@ -69,6 +69,7 @@ WEBAPP_URL = "https://gamecheb.ru"
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     get_or_create = sync_to_async(User.objects.get_or_create)
+    logger.info(f"Сравнение айди {message.from_user.id == settings.ADMIN_IDS}")
     user, created = await get_or_create(
         telegram_id=message.from_user.id,
         defaults={
