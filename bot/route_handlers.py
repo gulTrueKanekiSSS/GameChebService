@@ -1,4 +1,6 @@
 import uuid
+
+import logger
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, Video, URLInputFile
 from aiogram.filters import Command
@@ -19,6 +21,7 @@ async def check_admin(user_id: int) -> bool:
     """Проверяет, является ли пользователь администратором"""
     try:
         user = await User.objects.aget(telegram_id=user_id)
+        logger.logger.info(user_id)
         return user.is_admin
     except User.DoesNotExist:
         return False
