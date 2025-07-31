@@ -8,6 +8,8 @@ services:
     restart: always
     env_file:
       - .env
+    ports:
+      - "80:8000"
     volumes:
       - .:/app
     depends_on:
@@ -23,26 +25,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-  nginx:
-    image: nginx:stable
-    container_name: nginx
-    volumes:
-      - ./nginx/conf.d.d:/etc/nginx/conf.d.d
-      - ./certbot/conf.d:/etc/letsencrypt
-      - ./certbot/www:/var/www/certbot
-    ports:
-      - "80:80"
-      - "443:443"
-    depends_on:
-      - web
-
-  certbot:
-    image: certbot/certbot
-    volumes:
-        - ./certbot/conf.d:/etc/letsencrypt
-        - ./certbot/www:/var/www/certbot
-
-
 
 volumes:
   postgres_data:
