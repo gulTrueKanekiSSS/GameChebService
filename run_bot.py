@@ -121,8 +121,13 @@ async def simple_web_server():
 
     return app
 
-async def main():
 
+async def main():
+    await bot.delete_webhook(drop_pending_updates=True)
+
+    logger.info("Бот запускается в режиме polling...")
+
+    # Запускаем aiohttp сервер
     port = int(os.getenv('PORT', 8000))
     runner = web.AppRunner(await simple_web_server())
     await runner.setup()
@@ -130,18 +135,11 @@ async def main():
     await site.start()
     logger.info(f'aiohttp proxy запущен на 0.0.0.0:{port}')
 
-    # Keep alive
+    # Параллельно запускаем polling
     try:
-        while True:
-            await asyncio.sleep(3600)
-    except asyncio.CancelledError:
-        pass
-
-async def main():
-    await bot.delete_webhook(drop_pending_updates=True)
-
-    logger.info("Бот запускается в режиме polling...")
-    await dp.start_polling(bot)
+        await dp.start_polling(bot)
+    finally:
+        await runner.cleanup
 
 if __name__ == '__main__':
     asyncio.run(main())
