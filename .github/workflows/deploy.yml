@@ -12,17 +12,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Fix permissions and create nginx dirs
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.SSH_HOST }}
-        username: ${{ secrets.SSH_USER }}
-        port: ${{ secrets.SSH_PORT }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          sudo mkdir -p ${{ secrets.DEPLOY_PATH }}/nginx/conf.d
-          sudo chown -R $USER:$USER ${{ secrets.DEPLOY_PATH }}
-
     - name: Copy files via SSH
       uses: appleboy/scp-action@v0.1.7
       with:

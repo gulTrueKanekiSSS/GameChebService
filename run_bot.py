@@ -121,30 +121,21 @@ async def simple_web_server():
 
     return app
 
-# async def main():
-#     # Установка webhook
-#     WEBHOOK_URL = os.getenv('WEBHOOK_URL')
-#     if not WEBHOOK_URL:
-#         logger.error('WEBHOOK_URL не задана в окружении')
-#     else:
-#         await bot.delete_webhook(drop_pending_updates=True)
-#         await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
-#         logger.info(f'Webhook установлен на {WEBHOOK_URL}')
-#
-#     # Запуск aiohttp-сервера
-#     port = int(os.getenv('PORT', 8000))
-#     runner = web.AppRunner(await simple_web_server())
-#     await runner.setup()
-#     site = web.TCPSite(runner, '0.0.0.0', port)
-#     await site.start()
-#     logger.info(f'aiohttp proxy запущен на 0.0.0.0:{port}')
-#
-#     # Keep alive
-#     try:
-#         while True:
-#             await asyncio.sleep(3600)
-#     except asyncio.CancelledError:
-#         pass
+async def main():
+
+    port = int(os.getenv('PORT', 8000))
+    runner = web.AppRunner(await simple_web_server())
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    logger.info(f'aiohttp proxy запущен на 0.0.0.0:{port}')
+
+    # Keep alive
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except asyncio.CancelledError:
+        pass
 
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
