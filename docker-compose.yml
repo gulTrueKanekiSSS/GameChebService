@@ -12,12 +12,6 @@ services:
       - .:/app
     depends_on:
       - db
-  backend:
-    build: .
-    command: python manage.py runserver 0.0.0.0:8000
-    ports:
-      - "8000:8000"
-    container_name: gamecheb_backend
 
   db:
     image: postgres:15
