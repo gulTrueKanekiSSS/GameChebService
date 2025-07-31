@@ -141,6 +141,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://gamechebminiapp.onrender.com",
     "https://gamecheb.ru",
+    "https://gamecheb.tech"
 
 ]
 
