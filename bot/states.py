@@ -32,4 +32,7 @@ class RouteStates(StatesGroup):
     editing_route = State()
     editing_route_name = State()
     editing_route_description = State()
-    editing_route_photo = State() 
+    editing_route_photo = State()
+    
+    # Состояния для поиска и фильтрации точек
+    waiting_for_point_search = State() 
