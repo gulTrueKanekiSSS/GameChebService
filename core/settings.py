@@ -21,6 +21,7 @@ ALLOWED_HOSTS = [
   'localhost',
   '127.0.0.1',
   'gamechebservice-1.onrender.com',
+  '51.250.47.130'
 ]
 
 def get_admin_ids():
