@@ -1,1 +1,15 @@
 certbot/conf/accounts
+certbot/conf/archive/
+certbot/conf/live/
+certbot/conf/keys/
+certbot/conf/renewal/
+certbot/conf/renewal-hooks/
+certbot/logs/
+certbot/www/
+
+# --- Прочий мусор ---
+.git
+*.log
+node_modules
+__pycache__/
+*.pyc
