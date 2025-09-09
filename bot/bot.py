@@ -159,7 +159,7 @@ async def handle_get_routes(message: types.Message):
 
     await message.answer("Выберите маршрут:", reply_markup=keyboard)
 
-@dp.callback_query(lambda c: c.data.startswith("route_"))
+@dp.callback_query(lambda c: c.data.startswith("route_") and not c.data.startswith("route_points_"))
 async def handle_route_selection(callback_query: types.CallbackQuery, state: FSMContext):
     route_id = callback_query.data.split("_")[1]
     get_route_points = sync_to_async(lambda: list(RoutePoint.objects.filter(route_id=route_id)))

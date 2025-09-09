@@ -1,6 +1,6 @@
 import uuid
+import logging
 
-import logger
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, Video, URLInputFile
 from aiogram.filters import Command
@@ -16,6 +16,110 @@ from bot.states import RouteStates
 
 router = Router()
 
+# Константы для пагинации
+POINTS_PER_PAGE = 10
+
+async def get_points_by_routes():
+    """Группирует точки по маршрутам"""
+    routes = await sync_to_async(list)(Route.objects.filter(is_active=True).order_by('name'))
+    grouped_points = {}
+    
+    for route in routes:
+        route_points = await sync_to_async(list)(
+            RoutePoint.objects.filter(route=route).order_by('order').select_related('point')
+        )
+        if route_points:
+            grouped_points[route] = route_points
+    
+    # Получаем неиспользуемые точки
+    used_point_ids = await sync_to_async(list)(
+        RoutePoint.objects.values_list('point_id', flat=True)
+    )
+    unused_points = await sync_to_async(list)(
+        Point.objects.exclude(id__in=used_point_ids).order_by('-created_at')
+    )
+    
+    return grouped_points, unused_points
+
+async def get_filtered_points(filter_type="all", search_query=None, page=1):
+    """Получает отфильтрованные точки с пагинацией"""
+    if filter_type == "unused":
+        # Только неиспользуемые точки
+        used_point_ids = await sync_to_async(list)(
+            RoutePoint.objects.values_list('point_id', flat=True)
+        )
+        points = await sync_to_async(list)(
+            Point.objects.exclude(id__in=used_point_ids).order_by('-created_at')
+        )
+    elif filter_type == "search" and search_query:
+        # Поиск по названию (нечувствительный к регистру)
+        print(f"DEBUG: Поиск по запросу '{search_query}' (регистр не учитывается)")
+        points = await sync_to_async(list)(
+            Point.objects.filter(name__icontains=search_query).order_by('-created_at')
+        )
+        print(f"DEBUG: Найдено {len(points)} точек")
+        for point in points:
+            print(f"DEBUG: Точка: '{point.name}' (запрос: '{search_query}')")
+    else:
+        # Все точки
+        points = await sync_to_async(list)(Point.objects.all().order_by('-created_at'))
+    
+    # Пагинация
+    paginator = Paginator(points, POINTS_PER_PAGE)
+    page_obj = paginator.get_page(page)
+    
+    return page_obj, paginator.num_pages
+
+def get_points_filter_keyboard():
+    """Клавиатура для фильтрации точек"""
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🗺 Все точки", callback_data="filter_points:all"),
+                InlineKeyboardButton(text="📍 Неиспользуемые", callback_data="filter_points:unused")
+            ],
+            [
+                InlineKeyboardButton(text="🔍 Поиск", callback_data="search_points"),
+                InlineKeyboardButton(text="📅 По дате", callback_data="filter_points:by_date")
+            ],
+            [
+                InlineKeyboardButton(text="🗺 По маршрутам", callback_data="group_points_by_routes")
+            ],
+            [
+                InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_points_menu")
+            ]
+        ]
+    )
+    return keyboard
+
+def get_points_pagination_keyboard(current_page, total_pages, filter_type="all", search_query=None):
+    """Клавиатура для пагинации точек"""
+    keyboard = []
+    
+    # Кнопки навигации
+    nav_buttons = []
+    if current_page > 1:
+        nav_buttons.append(
+            InlineKeyboardButton(text="◀️", callback_data=f"page_points:{filter_type}:{current_page-1}:{search_query or ''}")
+        )
+    
+    nav_buttons.append(
+        InlineKeyboardButton(text=f"{current_page}/{total_pages}", callback_data="current_page")
+    )
+    
+    if current_page < total_pages:
+        nav_buttons.append(
+            InlineKeyboardButton(text="▶️", callback_data=f"page_points:{filter_type}:{current_page+1}:{search_query or ''}")
+        )
+    
+    keyboard.append(nav_buttons)
+    
+    # Кнопка возврата к фильтрам
+    keyboard.append([
+        InlineKeyboardButton(text="🔙 К фильтрам", callback_data="list_points")
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 async def check_admin(user_id: int) -> bool:
     """Проверяет, является ли пользователь администратором"""
@@ -102,56 +206,14 @@ async def handle_routes_menu(message: Message):
 
 @router.callback_query(F.data == "list_points")
 async def handle_list_points_callback(callback: CallbackQuery):
-    """Показать список точек"""
-    # if not await check_admin(callback.from_user.id):
-    #     return
-    #
-    # points = await sync_to_async(list)(Point.objects.all().order_by('-created_at'))
-    # if not points:
-    #     await callback.message.answer("Список точек пуст.")
-    #     return
-    #
-    # text = "📋 Список точек:\n\n"
-    # for point in points:
-    #     text += f"• {point.name}\n"
-    #     text += f"  ID: {point.id}\n"
-    #     text += f"  Описание: {point.description}\n"
-    #     text += f"  Создана: {point.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-    #
-    # keyboard = []
-    # for point in points:
-    #     short_point_id = str(point.id)
-    #     keyboard.append([
-    #         InlineKeyboardButton(
-    #             text=f"✏️ {point.name}",
-    #             callback_data=f"view_pt:{short_point_id}"
-    #         )
-    #     ])
-    # keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_points_menu")])
-    #
-    # await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
-
+    """Показать меню фильтрации точек"""
     if not await check_admin(callback.from_user.id):
         return
 
-    points = await sync_to_async(list)(Point.objects.all().order_by('-created_at'))
-    if not points:
-        await callback.message.answer("Список точек пуст.")
-        return
-
-    # Отдельно отправить клавиатуру
-    keyboard = []
-    for point in points:
-        short_point_id = str(point.id)[:8]
-        keyboard.append([
-            InlineKeyboardButton(
-                text=f"✏️ {point.name}",
-                callback_data=f"view_pt:{short_point_id}"
-            )
-        ])
-    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_points_menu")])
-
-    await callback.message.answer("Выберите точку:", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+    await callback.message.answer(
+        "🔍 Выберите способ просмотра точек:",
+        reply_markup=get_points_filter_keyboard()
+    )
 
 
 @router.callback_query(F.data == "list_routes")
@@ -385,11 +447,11 @@ async def handle_add_point_to_route(callback: CallbackQuery, state: FSMContext):
     if not await check_admin(callback.from_user.id):
         return
 
-    short_route_id = callback.data.split(":")[1]
+    route_id = callback.data.split(":")[1]
 
     try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
-    except Route.DoesNotExist:
+        route = await Route.objects.aget(id=uuid.UUID(route_id))
+    except (Route.DoesNotExist, ValueError):
         await callback.message.answer("Маршрут не найден.")
         return
 
@@ -401,19 +463,50 @@ async def handle_add_point_to_route(callback: CallbackQuery, state: FSMContext):
         await callback.message.answer("Нет доступных точек для добавления в маршрут.")
         return
 
+    # Группируем доступные точки по категориям
+    text = f"➕ Добавление точки в маршрут '{route.name}'\n\n"
+    text += f"📋 Доступно точек: {len(available_points)}\n\n"
+    
+    # Показываем первые 15 точек с группировкой
+    for i, point in enumerate(available_points[:15], 1):
+        text += f"{i}. {point.name}\n"
+        text += f"   📍 {point.description[:50]}{'...' if len(point.description) > 50 else ''}\n"
+        text += f"   📅 {point.created_at.strftime('%d.%m.%Y')}\n\n"
+    
+    if len(available_points) > 15:
+        text += f"... и еще {len(available_points) - 15} точек\n"
+        text += "Используйте поиск для быстрого нахождения нужной точки."
+
+    # Создаем клавиатуру с пагинацией
     keyboard = []
-    for point in available_points:
-        short_point_id = str(point.id)[:8]
+    
+    # Показываем первые 10 точек
+    for point in available_points[:10]:
         keyboard.append([
             InlineKeyboardButton(
-                text=point.name,
-                callback_data=f"sel_pt:{short_route_id}:{short_point_id}"
+                text=f"📍 {point.name}",
+                callback_data=f"sel_pt:{str(route.id)}:{str(point.id)}"
             )
         ])
-    keyboard.append([InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_route:{route.id}")])
+    
+    # Добавляем навигацию если точек много
+    if len(available_points) > 10:
+        keyboard.append([
+            InlineKeyboardButton(text="◀️", callback_data="current_page"),
+            InlineKeyboardButton(text="1", callback_data="current_page"),
+            InlineKeyboardButton(text="▶️", callback_data=f"add_pt_page:{str(route.id)}:2")
+        ])
+    
+    # Дополнительные опции
+    keyboard.append([
+        InlineKeyboardButton(text="🔍 Поиск точки", callback_data=f"search_for_route:{str(route.id)}"),
+        InlineKeyboardButton(text="📍 Только неиспользуемые", callback_data=f"filter_unused_for_route:{str(route.id)}")
+    ])
+    
+    keyboard.append([InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_route:{str(route.id)}")])
 
     await callback.message.answer(
-        "Выберите точку для добавления в маршрут:",
+        text,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
     )
 
@@ -424,12 +517,12 @@ async def handle_select_point_for_route(callback: CallbackQuery):
     if not await check_admin(callback.from_user.id):
         return
 
-    _, short_route_id, short_point_id = callback.data.split(":")
+    _, route_id, point_id = callback.data.split(":")
 
     try:
-        route = await Route.objects.aget(id__startswith=short_route_id)
-        point = await Point.objects.aget(id__startswith=short_point_id)
-    except (Route.DoesNotExist, Point.DoesNotExist):
+        route = await Route.objects.aget(id=uuid.UUID(route_id))
+        point = await Point.objects.aget(id=uuid.UUID(point_id))
+    except (Route.DoesNotExist, Point.DoesNotExist, ValueError):
         await callback.message.answer("Маршрут или точка не найдены.")
         return
 
@@ -453,10 +546,10 @@ async def handle_view_route(callback: CallbackQuery):
     if not await check_admin(callback.from_user.id):
         return
 
-    short_route_id = callback.data.split(":")[1]
+    route_id = callback.data.split(":")[1]
     try:
-        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
-    except Route.DoesNotExist:
+        route = await Route.objects.aget(id=uuid.UUID(route_id))
+    except (Route.DoesNotExist, ValueError):
         await callback.message.answer("Маршрут не найден.")
         return
 
@@ -483,12 +576,12 @@ async def handle_view_route(callback: CallbackQuery):
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit_rt:{short_route_id}"),
-                InlineKeyboardButton(text="🗑 Удалить", callback_data=f"del_rt:{short_route_id}")
+                InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit_rt:{str(route.id)}"),
+                InlineKeyboardButton(text="🗑 Удалить", callback_data=f"del_rt:{str(route.id)}")
             ],
             [
-                InlineKeyboardButton(text="➕ Добавить точку", callback_data=f"add_pt:{short_route_id}"),
-                InlineKeyboardButton(text="➖ Удалить точку", callback_data=f"remove_point_from_route:{short_route_id}")
+                InlineKeyboardButton(text="➕ Добавить точку", callback_data=f"add_pt:{str(route.id)}"),
+                InlineKeyboardButton(text="➖ Удалить точку", callback_data=f"remove_point_from_route:{str(route.id)}")
             ],
             [
                 InlineKeyboardButton(text="🔙 Назад к списку", callback_data="list_routes")
@@ -505,10 +598,10 @@ async def handle_remove_point_from_route(callback: CallbackQuery):
     if not await check_admin(callback.from_user.id):
         return
 
-    short_route_id = callback.data.split(":")[1]
+    route_id = callback.data.split(":")[1]
     try:
-        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
-    except Route.DoesNotExist:
+        route = await Route.objects.aget(id=uuid.UUID(route_id))
+    except (Route.DoesNotExist, ValueError):
         await callback.message.answer("Маршрут не найден.")
         return
 
@@ -520,14 +613,13 @@ async def handle_remove_point_from_route(callback: CallbackQuery):
 
     keyboard = []
     for route_point in route_points:
-        short_point_id = str(route_point.point.id)[:8]
         keyboard.append([
             InlineKeyboardButton(
                 text=route_point.point.name,
-                callback_data=f"rm_pt:{short_route_id}:{short_point_id}"
+                callback_data=f"rm_pt:{str(route.id)}:{str(route_point.point.id)}"
             )
         ])
-    keyboard.append([InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_route:{short_route_id}")])
+    keyboard.append([InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_route:{str(route.id)}")])
 
     await callback.message.answer(
         "Выберите точку для удаления из маршрута:",
@@ -541,10 +633,10 @@ async def handle_remove_point_from_route_confirm(callback: CallbackQuery):
     if not await check_admin(callback.from_user.id):
         return
 
-    _, short_route_id, short_point_id = callback.data.split(":")
+    _, route_id, point_id = callback.data.split(":")
     try:
-        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
-        point = await Point.objects.aget(id=uuid.UUID(short_point_id))
+        route = await Route.objects.aget(id=uuid.UUID(route_id))
+        point = await Point.objects.aget(id=uuid.UUID(point_id))
         route_point = await sync_to_async(RoutePoint.objects.get)(route=route, point=point)
     except (Route.DoesNotExist, Point.DoesNotExist, RoutePoint.DoesNotExist):
         await callback.message.answer("Маршрут или точка не найдены.")
@@ -559,7 +651,7 @@ async def handle_remove_point_from_route_confirm(callback: CallbackQuery):
                 [
                     InlineKeyboardButton(
                         text="🔙 Вернуться к маршруту",
-                        callback_data=f"view_route:{short_route_id}"
+                        callback_data=f"view_route:{route_id}"
                     )
                 ]
             ]
@@ -573,10 +665,10 @@ async def handle_edit_route(callback: CallbackQuery, state: FSMContext):
     if not await check_admin(callback.from_user.id):
         return
 
-    short_route_id = callback.data.split(":")[1]
+    route_id = callback.data.split(":")[1]
     try:
-        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
-    except Route.DoesNotExist:
+        route = await Route.objects.aget(id=uuid.UUID(route_id))
+    except (Route.DoesNotExist, ValueError):
         await callback.message.answer("Маршрут не найден.")
         return
 
@@ -593,7 +685,7 @@ async def handle_edit_route(callback: CallbackQuery, state: FSMContext):
                 InlineKeyboardButton(text="📸 Фото", callback_data="edit_route_photo")
             ],
             [
-                InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_route:{short_route_id}")
+                InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_route:{str(route.id)}")
             ]
         ]
     )
@@ -651,50 +743,6 @@ async def handle_edit_route_description(callback: CallbackQuery, state: FSMConte
     )
     await callback.message.answer("Введите новое описание маршрута:", reply_markup=keyboard)
 
-
-# @router.callback_query(F.data.startswith("edit_pt:"))
-# async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
-#     """Начало редактирования точки"""
-#     if not await check_admin(callback.from_user.id):
-#         return
-#
-#     short_point_id = callback.data.split(":")[1]
-#     try:
-#         point = await Point.objects.aget(id=uuid.UUID(short_point_id))
-#     except Point.DoesNotExist:
-#         await callback.message.answer("Точка не найдена.")
-#         return
-#
-#     await state.set_state(RouteStates.editing_point)
-#     await state.update_data(point_id=str(point.id))
-#
-#     keyboard = InlineKeyboardMarkup(
-#         inline_keyboard=[
-#             [
-#                 InlineKeyboardButton(text="📝 Название", callback_data="edit_point_name"),
-#                 InlineKeyboardButton(text="📄 Описание", callback_data="edit_point_description")
-#             ],
-#             [
-#                 InlineKeyboardButton(text="📍 Локация", callback_data="edit_point_location"),
-#                 InlineKeyboardButton(text="📝 Текст", callback_data=f"edit_pt_text:{short_point_id}")
-#             ],
-#             [
-#                 InlineKeyboardButton(text="📸 Фото", callback_data=f"edit_pt_photo:{short_point_id}"),
-#                 InlineKeyboardButton(text="🎵 Аудио", callback_data=f"edit_pt_audio:{short_point_id}")
-#             ],
-#             [
-#                 InlineKeyboardButton(text="🎥 Видео", callback_data=f"edit_pt_video:{short_point_id}")
-#             ],
-#             [
-#                 InlineKeyboardButton(text="🔙 Отмена", callback_data=f"view_pt:{short_point_id}")
-#             ]
-#         ]
-#     )
-#
-#     await callback.message.answer(
-#         "Выберите, что хотите отредактировать:",
-#         reply_markup=keyboard
-#     )
 
 @router.callback_query(F.data.startswith("edit_pt:"))
 async def handle_edit_point(callback: CallbackQuery, state: FSMContext):
@@ -1421,10 +1469,10 @@ async def handle_delete_route(callback: CallbackQuery):
     if not await check_admin(callback.from_user.id):
         return
 
-    short_route_id = callback.data.split(":")[1]
+    route_id = callback.data.split(":")[1]
     try:
-        route = await Route.objects.aget(id=uuid.UUID(short_route_id))
-    except Route.DoesNotExist:
+        route = await Route.objects.aget(id=uuid.UUID(route_id))
+    except (Route.DoesNotExist, ValueError):
         await callback.message.answer("Маршрут не найден.")
         return
 
@@ -1447,11 +1495,9 @@ async def handle_cancel_edit(callback: CallbackQuery, state: FSMContext):
         await state.clear()
 
         if point_id:
-            short_point_id = str(point_id)[:8]
-            await handle_view_point(CallbackQuery(message=callback.message, data=f"view_pt:{short_point_id}"))
+            await handle_view_point(CallbackQuery(message=callback.message, data=f"view_pt:{str(point_id)}"))
         elif route_id:
-            short_route_id = str(route_id)[:8]
-            await handle_view_route(CallbackQuery(message=callback.message, data=f"view_route:{short_route_id}"))
+            await handle_view_route(CallbackQuery(message=callback.message, data=f"view_route:{str(route_id)}"))
     except Exception as e:
         await callback.message.answer("Произошла ошибка при отмене редактирования.")
         await state.clear()
@@ -1774,3 +1820,841 @@ async def handle_add_route_photo(callback: CallbackQuery, state: FSMContext):
         "Отправьте фото для маршрута.\n"
         "Нажмите на кнопку 📎 и выберите 'Фото'"
     )
+
+@router.callback_query(F.data.startswith("filter_points:"))
+async def handle_filter_points(callback: CallbackQuery):
+    """Обработка фильтрации точек"""
+    if not await check_admin(callback.from_user.id):
+        return
+
+    filter_type = callback.data.split(":")[1]
+    
+    if filter_type == "by_date":
+        # Сортировка по дате создания
+        points = await sync_to_async(list)(Point.objects.all().order_by('-created_at'))
+        if not points:
+            await callback.message.answer("Список точек пуст.")
+            return
+        
+        text = "📅 Точки по дате создания:\n\n"
+        for i, point in enumerate(points[:20], 1):  # Показываем первые 20
+            text += f"{i}. {point.name}\n"
+            text += f"   📅 {point.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+            text += f"   📍 {point.description[:50]}{'...' if len(point.description) > 50 else ''}\n\n"
+        
+        if len(points) > 20:
+            text += f"... и еще {len(points) - 20} точек"
+        
+        keyboard = []
+        for point in points[:20]:
+            short_point_id = str(point.id)[:8]
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"👁️ {point.name}",
+                    callback_data=f"view_pt:{short_point_id}"
+                )
+            ])
+        keyboard.append([InlineKeyboardButton(text="🔙 К фильтрам", callback_data="list_points")])
+        
+        await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+        return
+    
+    # Получаем отфильтрованные точки с пагинацией
+    page_obj, total_pages = await get_filtered_points(filter_type, page=1)
+    
+    if not page_obj:
+        await callback.message.answer("По выбранному фильтру точки не найдены.")
+        return
+    
+    # Формируем текст с информацией о точках
+    text = f"📋 Точки (страница 1/{total_pages})\n\n"
+    
+    for point in page_obj:
+        # Проверяем, используется ли точка в маршрутах
+        route_info = await sync_to_async(lambda: list(RoutePoint.objects.filter(point=point).select_related('route')))()
+        
+        if route_info:
+            routes_text = ", ".join([f"'{rp.route.name}'" for rp in route_info])
+            text += f"📍 {point.name}\n"
+            text += f"   🗺 В маршрутах: {routes_text}\n"
+        else:
+            text += f"📍 {point.name} 🆕\n"
+            text += f"   🆕 Не используется\n"
+        
+        text += f"   📝 {point.description[:60]}{'...' if len(point.description) > 60 else ''}\n\n"
+    
+    # Создаем клавиатуру для точек
+    keyboard = []
+    for point in page_obj:
+        short_point_id = str(point.id)[:8]
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"👁️ {point.name}",
+                callback_data=f"view_pt:{short_point_id}"
+            )
+        ])
+    
+    # Добавляем пагинацию, если есть несколько страниц
+    if total_pages > 1:
+        keyboard.append([
+            InlineKeyboardButton(text="◀️", callback_data="current_page"),
+            InlineKeyboardButton(text="1", callback_data="current_page"),
+            InlineKeyboardButton(text="▶️", callback_data=f"page_points:{filter_type}:2:")
+        ])
+    
+    keyboard.append([InlineKeyboardButton(text="🔙 К фильтрам", callback_data="list_points")])
+    
+    await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
+@router.callback_query(F.data == "search_points")
+async def handle_search_points(callback: CallbackQuery, state: FSMContext):
+    """Начало поиска точек по названию"""
+    if not await check_admin(callback.from_user.id):
+        return
+    
+    # Проверяем, есть ли последний поисковый запрос
+    data = await state.get_data()
+    last_search_query = data.get('last_search_query')
+    
+    if last_search_query:
+        # Показываем последний запрос и предлагаем использовать его снова
+        keyboard = [
+            [InlineKeyboardButton(text=f"🔍 '{last_search_query}'", callback_data=f"repeat_search:{last_search_query}")],
+            [InlineKeyboardButton(text="🔍 Новый поиск", callback_data="new_search")],
+            [InlineKeyboardButton(text="🔙 К фильтрам", callback_data="list_points")]
+        ]
+        
+        await callback.message.answer(
+            f"🔍 Последний поиск: '{last_search_query}'\n\nВыберите действие:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+        )
+    else:
+        # Первый поиск
+        await state.set_state(RouteStates.waiting_for_point_search)
+        await callback.message.answer("🔍 Введите название точки для поиска:")
+
+@router.message(RouteStates.waiting_for_point_search)
+async def handle_point_search_query(message: Message, state: FSMContext):
+    """Обработка поискового запроса"""
+    search_query = message.text.strip()
+    print(f"DEBUG: Получен поисковый запрос: '{search_query}'")
+    
+    if len(search_query) < 2:
+        await message.answer("❌ Поисковый запрос должен содержать минимум 2 символа.")
+        return
+    
+    # Получаем данные о режиме поиска
+    data = await state.get_data()
+    mode = data.get('mode')
+    route_id = data.get('route_id')
+    
+    # Получаем результаты поиска
+    page_obj, total_pages = await get_filtered_points("search", search_query, page=1)
+    
+    if not page_obj:
+        # Даже при неудачном поиске не очищаем состояние и даем возможность продолжить
+        keyboard = [
+            [InlineKeyboardButton(text="🔍 Новый поиск", callback_data="search_points")],
+            [InlineKeyboardButton(text="🔙 К фильтрам", callback_data="list_points")]
+        ]
+        
+        await message.answer(
+            f"🔍 По запросу '{search_query}' ничего не найдено.\n\nПопробуйте другой запрос или вернитесь к фильтрам.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+        )
+        
+        # Сохраняем неудачный запрос для истории
+        await state.update_data(last_search_query=search_query)
+        return
+    
+    # Формируем текст результатов
+    if mode == "add_to_route":
+        text = f"🔍 Результаты поиска по '{search_query}'\n"
+        text += f"📋 Найдено: {len(page_obj)} точек для добавления в маршрут\n\n"
+    else:
+        text = f"🔍 Результаты поиска по '{search_query}'\n"
+        text += f"📋 Найдено: {len(page_obj)} из {total_pages} результатов\n\n"
+    
+    for point in page_obj:
+        # Проверяем использование в маршрутах
+        route_info = await sync_to_async(lambda: list(RoutePoint.objects.filter(point=point).select_related('route')))()
+        
+        if route_info:
+            routes_text = ", ".join([f"'{rp.route.name}'" for rp in route_info])
+            text += f"📍 {point.name}\n"
+            text += f"   🗺 В маршрутах: {routes_text}\n"
+        else:
+            text += f"📍 {point.name} 🆕\n"
+            text += f"   🆕 Не используется\n"
+        
+        text += f"   📝 {point.description[:60]}{'...' if len(point.description) > 60 else ''}\n\n"
+    
+    # Создаем клавиатуру в зависимости от режима
+    keyboard = []
+    for point in page_obj:
+        short_point_id = str(point.id)[:8]
+        
+        if mode == "add_to_route":
+            # Режим добавления в маршрут
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"➕ {point.name}",
+                    callback_data=f"sel_pt:{route_id}:{short_point_id}"
+                )
+            ])
+        else:
+            # Обычный режим просмотра
+            keyboard.append([
+                InlineKeyboardButton(
+                    text=f"👁️ {point.name}",
+                    callback_data=f"view_pt:{short_point_id}"
+                )
+            ])
+    
+    # Пагинация для результатов поиска
+    if total_pages > 1:
+        if mode == "add_to_route":
+            keyboard.append([
+                InlineKeyboardButton(text="◀️", callback_data="current_page"),
+                InlineKeyboardButton(text="1", callback_data="current_page"),
+                InlineKeyboardButton(text="▶️", callback_data=f"search_route_page:{route_id}:2:{search_query}")
+            ])
+        else:
+            keyboard.append([
+                InlineKeyboardButton(text="◀️", callback_data="current_page"),
+                InlineKeyboardButton(text="1", callback_data="current_page"),
+                InlineKeyboardButton(text="▶️", callback_data=f"page_points:search:2:{search_query}")
+            ])
+    
+    # Кнопка возврата в зависимости от режима
+    if mode == "add_to_route":
+        keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"add_pt:{route_id}")])
+    else:
+        # Добавляем кнопку для нового поиска
+        keyboard.append([
+            InlineKeyboardButton(text="🔍 Новый поиск", callback_data="search_points"),
+            InlineKeyboardButton(text="🔙 К фильтрам", callback_data="list_points")
+        ])
+    
+    await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+    
+    # Не очищаем состояние, чтобы пользователь мог продолжать поиск
+    if mode != "add_to_route":
+        await state.update_data(last_search_query=search_query)
+
+@router.callback_query(F.data.startswith("page_points:"))
+async def handle_points_pagination(callback: CallbackQuery):
+    """Обработка пагинации точек"""
+    if not await check_admin(callback.from_user.id):
+        return
+    
+    try:
+        parts = callback.data.split(":")
+        filter_type = parts[1]
+        page = int(parts[2])
+        search_query = parts[3] if len(parts) > 3 else None
+    except (ValueError, IndexError):
+        await callback.message.answer("❌ Ошибка пагинации.")
+        return
+    
+    # Получаем точки для указанной страницы
+    page_obj, total_pages = await get_filtered_points(filter_type, search_query, page)
+    
+    if not page_obj:
+        await callback.message.answer("На этой странице нет точек.")
+        return
+    
+    # Формируем текст
+    if filter_type == "search":
+        text = f"🔍 Результаты поиска по '{search_query}'\n"
+    else:
+        text = f"📋 Точки (страница {page}/{total_pages})\n"
+    
+    text += f"📋 Найдено: {len(page_obj)} из {total_pages} результатов\n\n"
+    
+    for point in page_obj:
+        # Проверяем использование в маршрутах
+        route_info = await sync_to_async(lambda: list(RoutePoint.objects.filter(point=point).select_related('route')))()
+        
+        if route_info:
+            routes_text = ", ".join([f"'{rp.route.name}'" for rp in route_info])
+            text += f"📍 {point.name}\n"
+            text += f"   🗺 В маршрутах: {routes_text}\n"
+        else:
+            text += f"📍 {point.name} 🆕\n"
+            text += f"   🆕 Не используется\n"
+        
+        text += f"   📝 {point.description[:60]}{'...' if len(point.description) > 60 else ''}\n\n"
+    
+    # Создаем клавиатуру
+    keyboard = []
+    for point in page_obj:
+        short_point_id = str(point.id)[:8]
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"👁️ {point.name}",
+                callback_data=f"view_pt:{short_point_id}"
+            )
+        ])
+    
+    # Пагинация
+    keyboard.append(get_points_pagination_keyboard(page, total_pages, filter_type, search_query).inline_keyboard[0])
+    keyboard.append([InlineKeyboardButton(text="🔙 К фильтрам", callback_data="list_points")])
+    
+    await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
+@router.callback_query(F.data == "group_points_by_routes")
+async def handle_group_points_by_routes(callback: CallbackQuery):
+    """Показать точки, сгруппированные по маршрутам"""
+    if not await check_admin(callback.from_user.id):
+        return
+    
+    grouped_points, unused_points = await get_points_by_routes()
+    
+    if not grouped_points and not unused_points:
+        await callback.message.answer("📋 Список точек пуст.")
+        return
+    
+    text = "🗺 Точки по маршрутам:\n\n"
+    
+    # Группируем по маршрутам
+    for route, route_points in grouped_points.items():
+        text += f"📍 Маршрут: {route.name}\n"
+        text += f"   📝 {route.description[:50]}{'...' if len(route.description) > 50 else ''}\n"
+        text += f"   🔢 Количество точек: {len(route_points)}\n\n"
+        
+        for i, route_point in enumerate(route_points, 1):
+            point = route_point.point
+            text += f"   {i}. {point.name}\n"
+            text += f"      📍 {point.description[:40]}{'...' if len(point.description) > 40 else ''}\n"
+        
+        text += "\n"
+    
+    # Неиспользуемые точки
+    if unused_points:
+        text += f"🆕 Неиспользуемые точки ({len(unused_points)}):\n\n"
+        for i, point in enumerate(unused_points[:10], 1):  # Показываем первые 10
+            text += f"{i}. {point.name}\n"
+            text += f"   📍 {point.description[:40]}{'...' if len(point.description) > 40 else ''}\n"
+        
+        if len(unused_points) > 10:
+            text += f"\n... и еще {len(unused_points) - 10} точек"
+    
+    # Создаем клавиатуру для быстрого доступа к точкам
+    keyboard = []
+    
+    # Кнопки для маршрутов
+    for route in grouped_points.keys():
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"🗺 {route.name}",
+                callback_data=f"view_route_points:{str(route.id)}"
+            )
+        ])
+    
+    # Кнопка для неиспользуемых точек
+    if unused_points:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"🆕 Неиспользуемые ({len(unused_points)})",
+                callback_data="filter_points:unused"
+            )
+        ])
+    
+    keyboard.append([InlineKeyboardButton(text="🔙 К фильтрам", callback_data="list_points")])
+    
+    await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
+@router.callback_query(F.data == "current_page")
+async def handle_current_page(callback: CallbackQuery):
+    """Обработка нажатия на текущую страницу (ничего не делает)"""
+    await callback.answer("Текущая страница")
+
+@router.callback_query(F.data.startswith("search_for_route:"))
+async def handle_search_for_route(callback: CallbackQuery, state: FSMContext):
+    """Поиск точки для добавления в маршрут"""
+    if not await check_admin(callback.from_user.id):
+        return
+    
+    route_id = callback.data.split(":")[1]
+    await state.set_state(RouteStates.waiting_for_point_search)
+    await state.update_data(route_id=route_id, mode="add_to_route")
+    await callback.message.answer("🔍 Введите название точки для поиска:")
+
+@router.callback_query(F.data.startswith("filter_unused_for_route:"))
+async def handle_filter_unused_for_route(callback: CallbackQuery):
+    """Показать только неиспользуемые точки для добавления в маршрут"""
+    if not await check_admin(callback.from_user.id):
+        return
+    
+    route_id = callback.data.split(":")[1]
+    
+    try:
+        route = await Route.objects.aget(id=uuid.UUID(route_id))
+    except (Route.DoesNotExist, ValueError):
+        await callback.message.answer("Маршрут не найден.")
+        return
+    
+    # Получаем неиспользуемые точки
+    used_point_ids = await sync_to_async(list)(
+        RoutePoint.objects.values_list('point_id', flat=True)
+    )
+    unused_points = await sync_to_async(list)(
+        Point.objects.exclude(id__in=used_point_ids).order_by('-created_at')
+    )
+    
+    if not unused_points:
+        await callback.message.answer("Нет неиспользуемых точек для добавления в маршрут.")
+        return
+    
+    text = f"🆕 Неиспользуемые точки для маршрута '{route.name}'\n\n"
+    text += f"📋 Найдено: {len(unused_points)} точек\n\n"
+    
+    # Показываем первые 15 точек
+    for i, point in enumerate(unused_points[:15], 1):
+        text += f"{i}. {point.name}\n"
+        text += f"   📍 {point.description[:50]}{'...' if len(point.description) > 50 else ''}\n"
+        text += f"   📅 {point.created_at.strftime('%d.%m.%Y')}\n\n"
+    
+    if len(unused_points) > 15:
+        text += f"... и еще {len(unused_points) - 15} точек"
+    
+    # Создаем клавиатуру
+    keyboard = []
+    for point in unused_points[:10]:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"📍 {point.name}",
+                callback_data=f"sel_pt:{str(route.id)}:{str(point.id)}"
+            )
+        ])
+    
+    # Пагинация если нужно
+    if len(unused_points) > 10:
+        keyboard.append([
+            InlineKeyboardButton(text="◀️", callback_data="current_page"),
+            InlineKeyboardButton(text="1", callback_data="current_page"),
+            InlineKeyboardButton(text="▶️", callback_data=f"unused_page:{str(route.id)}:2")
+        ])
+    
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"add_pt:{str(route.id)}")])
+    
+    await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
+@router.callback_query(F.data.startswith("add_pt_page:"))
+async def handle_add_point_page(callback: CallbackQuery):
+    """Пагинация при добавлении точек в маршрут"""
+    if not await check_admin(callback.from_user.id):
+        return
+    
+    try:
+        _, route_id, page = callback.data.split(":")
+        page = int(page)
+    except (ValueError, IndexError):
+        await callback.message.answer("❌ Ошибка пагинации.")
+        return
+    
+    try:
+        route = await Route.objects.aget(id=uuid.UUID(route_id))
+    except (Route.DoesNotExist, ValueError):
+        await callback.message.answer("Маршрут не найден.")
+        return
+    
+    existing_points = await sync_to_async(list)(
+        RoutePoint.objects.filter(route=route).values_list('point_id', flat=True))
+    available_points = await sync_to_async(list)(Point.objects.exclude(id__in=existing_points))
+    
+    if not available_points:
+        await callback.message.answer("Нет доступных точек для добавления в маршрут.")
+        return
+    
+    # Пагинация
+    paginator = Paginator(available_points, 10)
+    page_obj = paginator.get_page(page)
+    
+    text = f"➕ Добавление точки в маршрут '{route.name}'\n"
+    text += f"📋 Страница {page}/{paginator.num_pages}\n\n"
+    
+    for i, point in enumerate(page_obj, 1):
+        text += f"{i}. {point.name}\n"
+        text += f"   📍 {point.description[:50]}{'...' if len(point.description) > 50 else ''}\n"
+        text += f"   📅 {point.created_at.strftime('%d.%m.%Y')}\n\n"
+    
+    # Создаем клавиатуру
+    keyboard = []
+    for point in page_obj:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"📍 {point.name}",
+                callback_data=f"sel_pt:{str(route.id)}:{str(point.id)}"
+            )
+        ])
+    
+    # Навигация
+    nav_buttons = []
+    if page > 1:
+        nav_buttons.append(
+            InlineKeyboardButton(text="◀️", callback_data=f"add_pt_page:{str(route.id)}:{page-1}")
+        )
+    
+    nav_buttons.append(
+        InlineKeyboardButton(text=f"{page}", callback_data="current_page")
+    )
+    
+    if page < paginator.num_pages:
+        nav_buttons.append(
+            InlineKeyboardButton(text="▶️", callback_data=f"add_pt_page:{str(route.id)}:{page+1}")
+        )
+    
+    keyboard.append(nav_buttons)
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"add_pt:{str(route.id)}")])
+    
+    await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
+@router.callback_query(F.data.startswith("search_route_page:"))
+async def handle_search_route_page(callback: CallbackQuery):
+    """Пагинация поиска при добавлении точек в маршрут"""
+    if not await check_admin(callback.from_user.id):
+        return
+    
+    try:
+        _, route_id, page, search_query = callback.data.split(":")
+        page = int(page)
+    except (ValueError, IndexError):
+        await callback.message.answer("❌ Ошибка пагинации.")
+        return
+    
+    # Получаем результаты поиска для указанной страницы
+    page_obj, total_pages = await get_filtered_points("search", search_query, page)
+    
+    if not page_obj:
+        await callback.message.answer("На этой странице нет результатов.")
+        return
+    
+    # Формируем текст
+    text = f"🔍 Результаты поиска по '{search_query}'\n"
+    text += f"📋 Страница {page}/{total_pages}\n\n"
+    
+    for point in page_obj:
+        # Проверяем использование в маршрутах
+        route_info = await sync_to_async(lambda: list(RoutePoint.objects.filter(point=point).select_related('route')))()
+        
+        if route_info:
+            routes_text = ", ".join([f"'{rp.route.name}'" for rp in route_info])
+            text += f"📍 {point.name}\n"
+            text += f"   🗺 В маршрутах: {routes_text}\n"
+        else:
+            text += f"📍 {point.name} 🆕\n"
+            text += f"   🆕 Не используется\n"
+        
+        text += f"   📝 {point.description[:60]}{'...' if len(point.description) > 60 else ''}\n\n"
+    
+    # Создаем клавиатуру
+    keyboard = []
+    for point in page_obj:
+        short_point_id = str(point.id)[:8]
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"➕ {point.name}",
+                callback_data=f"sel_pt:{route_id}:{short_point_id}"
+            )
+        ])
+    
+    # Навигация
+    nav_buttons = []
+    if page > 1:
+        nav_buttons.append(
+            InlineKeyboardButton(text="◀️", callback_data=f"search_route_page:{route_id}:{page-1}:{search_query}")
+        )
+    
+    nav_buttons.append(
+        InlineKeyboardButton(text=f"{page}", callback_data="current_page")
+    )
+    
+    if page < total_pages:
+        nav_buttons.append(
+            InlineKeyboardButton(text="▶️", callback_data=f"search_route_page:{route_id}:{page+1}:{search_query}")
+        )
+    
+    keyboard.append(nav_buttons)
+    keyboard.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"add_pt:{route_id}")])
+    
+    await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
+@router.callback_query(F.data.startswith("view_route_points:"))
+async def handle_view_route_points(callback: CallbackQuery):
+    """Показать точки конкретного маршрута"""
+    if not await check_admin(callback.from_user.id):
+        return
+    
+    route_id = callback.data.split(":")[1]
+    try:
+        route = await Route.objects.aget(id=uuid.UUID(route_id))
+    except (Route.DoesNotExist, ValueError):
+        await callback.message.answer("Маршрут не найден.")
+        return
+    
+    # Получаем точки маршрута
+    route_points = await sync_to_async(list)(
+        RoutePoint.objects.filter(route=route).order_by('order').select_related('point')
+    )
+    
+    if not route_points:
+        text = f"🗺 Маршрут: {route.name}\n"
+        text += f"📝 {route.description}\n\n"
+        text += "❌ В этом маршруте пока нет точек."
+        
+        keyboard = [
+            [InlineKeyboardButton(text="➕ Добавить точку", callback_data=f"add_pt:{str(route.id)}")],
+            [InlineKeyboardButton(text="🔙 К маршрутам", callback_data="group_points_by_routes")]
+        ]
+        
+        await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+        return
+    
+    # Формируем текст с точками маршрута
+    text = f"🗺 Маршрут: {route.name}\n"
+    text += f"📝 {route.description}\n"
+    text += f"🔢 Количество точек: {len(route_points)}\n\n"
+    text += "📍 Точки маршрута:\n\n"
+    
+    for i, route_point in enumerate(route_points, 1):
+        point = route_point.point
+        text += f"{i}. {point.name}\n"
+        text += f"   📍 {point.description[:60]}{'...' if len(point.description) > 60 else ''}\n"
+        
+        # Проверяем наличие медиа-файлов
+        media_info = []
+        if point.photo:
+            media_info.append("📸")
+        if point.audio_file:
+            media_info.append("🎵")
+        if point.video_file:
+            media_info.append("🎥")
+        
+        if media_info:
+            text += f"   {' '.join(media_info)}\n"
+        
+        text += "\n"
+    
+    # Создаем клавиатуру для действий с точками
+    keyboard = []
+    
+    # Кнопки для каждой точки
+    for i, route_point in enumerate(route_points[:10], 1):  # Показываем первые 10
+        point = route_point.point
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"👁️ {i}. {point.name}",
+                callback_data=f"view_pt:{str(point.id)}"
+            )
+        ])
+    
+    # Пагинация если точек много
+    if len(route_points) > 10:
+        keyboard.append([
+            InlineKeyboardButton(text="◀️", callback_data="current_page"),
+            InlineKeyboardButton(text="1", callback_data="current_page"),
+            InlineKeyboardButton(text="▶️", callback_data=f"route_points_page:{str(route.id)}:2")
+        ])
+    
+    # Дополнительные действия
+    keyboard.append([
+        InlineKeyboardButton(text="➕ Добавить точку", callback_data=f"add_pt:{str(route.id)}"),
+        InlineKeyboardButton(text="✏️ Редактировать маршрут", callback_data=f"edit_rt:{str(route.id)}")
+    ])
+    
+    keyboard.append([InlineKeyboardButton(text="🔙 К маршрутам", callback_data="group_points_by_routes")])
+    
+    await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
+@router.callback_query(F.data.startswith("route_points_page:"))
+async def handle_route_points_pagination(callback: CallbackQuery):
+    """Пагинация для точек маршрута"""
+    if not await check_admin(callback.from_user.id):
+        return
+    
+    try:
+        _, route_id, page_str = callback.data.split(":")
+        page = int(page_str)
+        route = await Route.objects.aget(id=uuid.UUID(route_id))
+    except (ValueError, Route.DoesNotExist):
+        await callback.message.answer("Маршрут не найден.")
+        return
+    
+    # Получаем точки маршрута
+    route_points = await sync_to_async(list)(
+        RoutePoint.objects.filter(route=route).order_by('order').select_related('point')
+    )
+    
+    if not route_points:
+        await callback.message.answer("В этом маршруте нет точек.")
+        return
+    
+    # Настройки пагинации
+    points_per_page = 10
+    total_pages = (len(route_points) + points_per_page - 1) // points_per_page
+    
+    if page < 1 or page > total_pages:
+        page = 1
+    
+    # Вычисляем индексы для текущей страницы
+    start_idx = (page - 1) * points_per_page
+    end_idx = start_idx + points_per_page
+    current_points = route_points[start_idx:end_idx]
+    
+    # Формируем текст с точками маршрута
+    text = f"🗺 Маршрут: {route.name}\n"
+    text += f"📝 {route.description}\n"
+    text += f"🔢 Количество точек: {len(route_points)}\n"
+    text += f"📄 Страница {page} из {total_pages}\n\n"
+    text += "📍 Точки маршрута:\n\n"
+    
+    for i, route_point in enumerate(current_points, start_idx + 1):
+        point = route_point.point
+        text += f"{i}. {point.name}\n"
+        text += f"   📍 {point.description[:60]}{'...' if len(point.description) > 60 else ''}\n"
+        
+        # Проверяем наличие медиа-файлов
+        media_info = []
+        if point.photo:
+            media_info.append("📸")
+        if point.audio_file:
+            media_info.append("🎵")
+        if point.video_file:
+            media_info.append("🎥")
+        
+        if media_info:
+            text += f"   {' '.join(media_info)}\n"
+        
+        text += "\n"
+    
+    # Создаем клавиатуру для действий с точками
+    keyboard = []
+    
+    # Кнопки для каждой точки на текущей странице
+    for i, route_point in enumerate(current_points, start_idx + 1):
+        point = route_point.point
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"👁️ {i}. {point.name}",
+                callback_data=f"view_pt:{str(point.id)}"
+            )
+        ])
+    
+    # Пагинация
+    pagination_row = []
+    
+    if page > 1:
+        pagination_row.append(
+            InlineKeyboardButton(text="◀️", callback_data=f"route_points_page:{str(route.id)}:{page - 1}")
+        )
+    
+    pagination_row.append(
+        InlineKeyboardButton(text=str(page), callback_data="current_page")
+    )
+    
+    if page < total_pages:
+        pagination_row.append(
+            InlineKeyboardButton(text="▶️", callback_data=f"route_points_page:{str(route.id)}:{page + 1}")
+        )
+    
+    if pagination_row:
+        keyboard.append(pagination_row)
+    
+    # Дополнительные действия
+    keyboard.append([
+        InlineKeyboardButton(text="➕ Добавить точку", callback_data=f"add_pt:{str(route.id)}"),
+        InlineKeyboardButton(text="✏️ Редактировать маршрут", callback_data=f"edit_rt:{str(route.id)}")
+    ])
+    
+    keyboard.append([InlineKeyboardButton(text="🔙 К маршрутам", callback_data="group_points_by_routes")])
+    
+    # Обновляем сообщение вместо отправки нового
+    try:
+        await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+    except Exception as e:
+        # Если не удалось отредактировать, отправляем новое сообщение
+        await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+
+@router.callback_query(F.data.startswith("repeat_search:"))
+async def handle_repeat_search(callback: CallbackQuery, state: FSMContext):
+    """Повторный поиск с тем же запросом"""
+    if not await check_admin(callback.from_user.id):
+        return
+    
+    search_query = callback.data.split(":", 1)[1]
+    
+    # Получаем результаты поиска
+    page_obj, total_pages = await get_filtered_points("search", search_query, page=1)
+    
+    if not page_obj:
+        # Даже при неудачном поиске даем возможность продолжить
+        keyboard = [
+            [InlineKeyboardButton(text="🔍 Новый поиск", callback_data="search_points")],
+            [InlineKeyboardButton(text="🔙 К фильтрам", callback_data="list_points")]
+        ]
+        
+        await callback.message.answer(
+            f"🔍 По запросу '{search_query}' ничего не найдено.\n\nПопробуйте другой запрос или вернитесь к фильтрам.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+        )
+        
+        # Сохраняем неудачный запрос для истории
+        await state.update_data(last_search_query=search_query)
+        return
+    
+    # Формируем текст результатов
+    text = f"🔍 Результаты поиска по '{search_query}'\n"
+    text += f"📋 Найдено: {len(page_obj)} из {total_pages} результатов\n\n"
+    
+    for point in page_obj:
+        # Проверяем использование в маршрутах
+        route_info = await sync_to_async(lambda: list(RoutePoint.objects.filter(point=point).select_related('route')))()
+        
+        if route_info:
+            routes_text = ", ".join([f"'{rp.route.name}'" for rp in route_info])
+            text += f"📍 {point.name}\n"
+            text += f"   🗺 В маршрутах: {routes_text}\n"
+        else:
+            text += f"📍 {point.name} 🆕\n"
+            text += f"   🆕 Не используется\n"
+        
+        text += f"   📝 {point.description[:60]}{'...' if len(point.description) > 60 else ''}\n\n"
+    
+    # Создаем клавиатуру
+    keyboard = []
+    for point in page_obj:
+        short_point_id = str(point.id)[:8]
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"👁️ {point.name}",
+                callback_data=f"view_pt:{short_point_id}"
+            )
+        ])
+    
+    # Пагинация для результатов поиска
+    if total_pages > 1:
+        keyboard.append([
+            InlineKeyboardButton(text="◀️", callback_data="current_page"),
+            InlineKeyboardButton(text="1", callback_data="current_page"),
+            InlineKeyboardButton(text="▶️", callback_data=f"page_points:search:2:{search_query}")
+        ])
+    
+    # Кнопки для продолжения поиска
+    keyboard.append([
+        InlineKeyboardButton(text="🔍 Новый поиск", callback_data="search_points"),
+        InlineKeyboardButton(text="🔙 К фильтрам", callback_data="list_points")
+    ])
+    
+    await callback.message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+    await state.update_data(last_search_query=search_query)
+
+@router.callback_query(F.data == "new_search")
+async def handle_new_search(callback: CallbackQuery, state: FSMContext):
+    """Начало нового поиска"""
+    if not await check_admin(callback.from_user.id):
+        return
+    
+    await state.set_state(RouteStates.waiting_for_point_search)
+    await callback.message.answer("🔍 Введите название точки для поиска:")
