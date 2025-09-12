@@ -11,4 +11,4 @@ class ReadOnlyOrTokenPermission(BasePermission):
         if token.startswith('Token '):
             token_key = token.split(' ', 1)[1]
             return token_key == settings.API_TOKEN
-        return False 
+        return False
